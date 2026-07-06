@@ -277,7 +277,6 @@
 </head>
 <body>
   <div id="root"></div>
-
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-app.js";
     import {
@@ -345,7 +344,6 @@
 
     window.dispatchEvent(new CustomEvent("firebase-ready"));
   </script>
-
   <script type="text/babel">
     const { useEffect, useMemo, useRef, useState } = React;
 
@@ -364,7 +362,6 @@
 
     const today = () => new Date().toISOString().slice(0, 10);
     const makeId = () => `task-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-
     const blankTask = status => ({
       id: makeId(),
       status: status || "new",
@@ -502,35 +499,19 @@
 
     const AI_SETTINGS_KEY = "dailyWorkTrackerAISettings";
     const PARSED_FIELDS = [
-      ["title", "Title"],
-      ["source", "Source"],
-      ["project", "Project"],
-      ["background", "Background"],
-      ["receivedDate", "Received date"],
-      ["dueDate", "Due date"],
-      ["priority", "Priority"],
-      ["status", "Status"],
-      ["nextAction", "Next action"],
-      ["workflowNotes", "Workflow notes"],
-      ["feedback", "Feedback"],
-      ["finalResult", "Final result"]
+      ["title", "Title"], ["source", "Source"], ["project", "Project"],
+      ["background", "Background"], ["receivedDate", "Received date"],
+      ["dueDate", "Due date"], ["priority", "Priority"], ["status", "Status"],
+      ["nextAction", "Next action"], ["workflowNotes", "Workflow notes"],
+      ["feedback", "Feedback"], ["finalResult", "Final result"]
     ];
 
-    const emptyParsedResult = () =>
-      Object.fromEntries(PARSED_FIELDS.map(([key]) => [key, ""]));
+    const emptyParsedResult = () => Object.fromEntries(PARSED_FIELDS.map(([key]) => [key, ""]));
 
     function loadAISettings() {
-      const defaults = {
-        provider: "OpenAI-compatible",
-        endpoint: "",
-        apiKey: "",
-        model: ""
-      };
+      const defaults = { provider: "OpenAI-compatible", endpoint: "", apiKey: "", model: "" };
       try {
-        return {
-          ...defaults,
-          ...JSON.parse(localStorage.getItem(AI_SETTINGS_KEY) || "{}")
-        };
+        return { ...defaults, ...JSON.parse(localStorage.getItem(AI_SETTINGS_KEY) || "{}") };
       } catch {
         return defaults;
       }
@@ -539,7 +520,7 @@
     function normalizePriority(value) {
       const text = String(value || "").trim().toLowerCase();
       if (["high", "高", "urgent", "紧急", "重要"].includes(text)) return "High";
-      if (["medium", "中", "normal", "普通"].includes(text)) return "Medium";
+      if (["medium", "中", "normal", "普通", "一般"].includes(text)) return "Medium";
       if (["low", "低", "不急"].includes(text)) return "Low";
       return "";
     }
@@ -547,25 +528,12 @@
     function normalizeStatus(value) {
       const text = String(value || "").trim().toLowerCase();
       const map = {
-        "new": "new",
-        "new task": "new",
-        "新任务": "new",
-        "to do": "todo",
-        "todo": "todo",
-        "待办": "todo",
-        "in progress": "inprogress",
-        "inprogress": "inprogress",
-        "进行中": "inprogress",
-        "waiting for feedback": "feedback",
-        "feedback": "feedback",
-        "等反馈": "feedback",
-        "等待反馈": "feedback",
-        "done": "done",
-        "完成": "done",
-        "已完成": "done",
-        "archived": "archived",
-        "归档": "archived",
-        "已归档": "archived"
+        "new": "new", "new task": "new", "新任务": "new", "新的": "new",
+        "to do": "todo", "todo": "todo", "待办": "todo", "还没开始": "todo", "未开始": "todo",
+        "in progress": "inprogress", "inprogress": "inprogress", "进行中": "inprogress", "正在处理": "inprogress", "处理中": "inprogress",
+        "waiting for feedback": "feedback", "feedback": "feedback", "等反馈": "feedback", "等待反馈": "feedback", "待反馈": "feedback",
+        "done": "done", "完成": "done", "已完成": "done", "做完了": "done",
+        "archived": "archived", "归档": "archived", "已归档": "archived"
       };
       return map[text] || "";
     }
@@ -591,237 +559,176 @@
 
     function parseDateExpression(text) {
       const now = new Date();
-      if (/今天|today/i.test(text)) return dateKey(now);
-      if (/明天|tomorrow/i.test(text)) return addDays(now, 1);
-      if (/后天|day after tomorrow/i.test(text)) return addDays(now, 2);
-
       let match = text.match(/(20\d{2})[-\/]([01]?\d)[-\/]([0-3]?\d)/);
-      if (match) {
-        return `${match[1]}-${String(Number(match[2])).padStart(2, "0")}-${String(Number(match[3])).padStart(2, "0")}`;
-      }
-
+      if (match) return `${match[1]}-${String(Number(match[2])).padStart(2, "0")}-${String(Number(match[3])).padStart(2, "0")}`;
       match = text.match(/([01]?\d)月([0-3]?\d)日?/);
-      if (match) {
-        return `${now.getFullYear()}-${String(Number(match[1])).padStart(2, "0")}-${String(Number(match[2])).padStart(2, "0")}`;
-      }
+      if (match) return `${now.getFullYear()}-${String(Number(match[1])).padStart(2, "0")}-${String(Number(match[2])).padStart(2, "0")}`;
+      match = text.match(/day after tomorrow|后天|tomorrow|明天|today|今天/i);
+      if (/day after tomorrow|后天/i.test(match?.[0] || "")) return addDays(now, 2);
+      if (/tomorrow|明天/i.test(match?.[0] || "")) return addDays(now, 1);
+      if (/today|今天/i.test(match?.[0] || "")) return dateKey(now);
       return "";
     }
 
     function firstMatch(text, patterns) {
       for (const pattern of patterns) {
         const match = text.match(pattern);
-        if (match?.[1]?.trim()) {
-          return match[1].trim().replace(/[，。；;,.]+$/, "");
-        }
+        if (match?.[1]?.trim()) return match[1].trim().replace(/[，。；;,.]+$/, "");
       }
       return "";
+    }
+
+    function extractRuleSource(text) {
+      const sourceRules = [
+        [/(?:^|[，,。；;\s])老板\s*让我/, "老板"],
+        [/(?:^|[，,。；;\s])领导\s*让我/, "领导"],
+        [/(?:^|[，,。；;\s])客户\s*(?:让我|要求)/, "客户"],
+        [/(?:^|[，,。；;\s])海尔\s*(?:让我|要求)/, "海尔"],
+        [/(?:^|[，,。；;\s])供应商\s*反馈/, "供应商"],
+        [/(?:^|[，,。；;\s])物流\s*反馈/, "物流"]
+      ];
+      return sourceRules.find(([pattern]) => pattern.test(text))?.[1] || "";
+    }
+
+    function extractRuleProject(text) {
+      const match = text.match(
+        /(?:项目\s*(?:是|为|[:：])|类别\s*(?:是|为|[:：])|属于)\s*(.+?)(?=[，,。；;\n]|优先级|目前|当前|状态|进行中|待办|等待反馈|等反馈|待反馈|下一步|接下来|截止|最后期限|今天|明天|后天|反馈|结果|结论|$)/i
+      );
+      return match?.[1]?.trim().replace(/[，,。；;]+$/, "") || "";
+    }
+
+    function extractRuleTitle(text) {
+      const actionPattern = /跟进|确认|整理|修改|检查|核对|输出|提交|做|准备|处理|对接|反馈|翻译|优化/;
+      let working = text
+        .replace(/^.*?(?:老板|领导)\s*让我\s*/, "")
+        .replace(/^.*?(?:客户|海尔)\s*(?:让我|要求)\s*/, "")
+        .replace(/^.*?(?:供应商|物流)\s*反馈(?:是|说|为)?\s*/, "")
+        .replace(/^.*?\b(?:asked|told) me to\b\s*/i, "");
+
+      const clauses = working.split(/[，,。；;\n]/).map(item => item.trim()).filter(Boolean);
+      const candidates = [];
+      clauses.forEach(clause => {
+        if (/^(?:项目\s*(?:是|为|[:：])|类别\s*(?:是|为|[:：])|属于|优先级|目前|当前|状态|下一步|接下来|截止|最后期限|反馈|结果|结论)/.test(clause)) return;
+        let cleaned = clause
+          .split(/(?=项目\s*(?:是|为|[:：])|类别\s*(?:是|为|[:：])|优先级|目前|当前|状态|下一步|接下来|截止|最后期限|反馈|结果|结论)/)[0]
+          .replace(/需要在\s*(?:今天|明天|后天|本周|下周)?(?:上午|下午|晚上)?(?:前完成)?/g, "")
+          .replace(/截止到\s*(?:今天|明天|后天|本周|下周)?(?:上午|下午|晚上)?/g, "")
+          .replace(/(?:今天|明天|后天|本周|下周|上午|下午|晚上)/g, "")
+          .replace(/最后期限/g, "")
+          .trim();
+        const action = cleaned.match(actionPattern);
+        if (!action) return;
+        const title = cleaned.slice(action.index).replace(/前完成$/, "").trim();
+        if (title) candidates.push(title);
+      });
+
+      return candidates.find(title => title !== "提交") || candidates[0] || "";
+    }
+
+    function extractRuleDueDate(text) {
+      const explicit = text.match(
+        /(?:截止(?:到|日期)?|最后期限(?:是|为)?|需要在)[：:\s]*(day after tomorrow|后天|tomorrow|明天|today|今天|20\d{2}[-\/]\d{1,2}[-\/]\d{1,2}|\d{1,2}月\d{1,2}日?)/i
+      );
+      if (explicit) return parseDateExpression(explicit[1]);
+      const delivery = text.match(/(day after tomorrow|后天|tomorrow|明天|today|今天)(?:前)?\s*(?:提交|完成|交付)/i);
+      if (delivery) return parseDateExpression(delivery[1]);
+      return parseDateExpression(text);
     }
 
     function ruleParse(text) {
       const result = emptyParsedResult();
       const compact = text.trim();
 
-      if (/(高|紧急|重要|urgent|high)/i.test(compact)) result.priority = "High";
-      else if (/(中|普通|normal|medium)/i.test(compact)) result.priority = "Medium";
-      else if (/(低|不急|low)/i.test(compact)) result.priority = "Low";
+      const explicitPriority = compact.match(/(?:优先级|priority)\s*(?:是|为|[:：])?\s*(高|中|低|high|medium|normal|low|urgent|紧急|重要|普通|一般|不急)/i);
+      if (explicitPriority) result.priority = normalizePriority(explicitPriority[1]);
+      else if (/(?:紧急|重要|urgent|\bhigh\b)/i.test(compact)) result.priority = "High";
+      else if (/(?:普通|一般|\bnormal\b|\bmedium\b)/i.test(compact)) result.priority = "Medium";
+      else if (/(?:不急|\blow\b)/i.test(compact)) result.priority = "Low";
 
       const statusChecks = [
-        [/(等反馈|等待反馈|waiting for feedback)/i, "feedback"],
-        [/(进行中|in progress)/i, "inprogress"],
-        [/(待办|to do|todo)/i, "todo"],
-        [/(新任务|new task)/i, "new"],
-        [/(已完成|完成|done)/i, "done"],
+        [/(等待反馈|等反馈|待反馈|waiting for feedback)/i, "feedback"],
+        [/(进行中|正在处理|处理中|in progress)/i, "inprogress"],
+        [/(待办|还没开始|未开始|to do|todo)/i, "todo"],
+        [/(新任务|新的|new task)/i, "new"],
+        [/(已完成|做完了|完成|done)/i, "done"],
         [/(已归档|归档|archived)/i, "archived"]
       ];
-      result.status =
-        statusChecks.find(([pattern]) => pattern.test(compact))?.[1] || "";
+      result.status = statusChecks.find(([pattern]) => pattern.test(compact))?.[1] || "";
 
-      const dueContext = firstMatch(compact, [
-        /(?:截止(?:到|日期)?|到期(?:日)?|deadline(?: is)?|due(?: date)?(?: is)?)[：:\s]*([^，。；;\n]+)/i
-      ]);
-      result.dueDate = parseDateExpression(dueContext || compact);
+      result.dueDate = extractRuleDueDate(compact);
 
       result.nextAction = firstMatch(compact, [
-        /(?:下一步(?:是|为)?|接下来(?:要|是)?)[：:\s]*([^，。；;\n]+)/i,
+        /(?:下一步(?:是|为)?|接下来(?:要|是)?)[：:\s]*(.+?)(?=[，,。；;\n]|优先级|目前|当前|状态|截止|最后期限|反馈|结果|结论|$)/i,
         /next step(?: is|:)?\s*([^,.;\n]+)/i
       ]);
-
       result.feedback = firstMatch(compact, [
         /(?:客户|供应商)?反馈(?:是|说|为)?[：:\s]*([^，。；;\n]+)/i,
         /(?:customer|supplier) feedback(?: is| says|:)?\s*([^,.;\n]+)/i
       ]);
-
       result.finalResult = firstMatch(compact, [
         /(?:最终结果|结论)(?:是|为)?[：:\s]*([^，。；;\n]+)/i,
         /result(?: is|:)?\s*([^,.;\n]+)/i
       ]);
-
-      result.source = firstMatch(compact, [
+      result.source = extractRuleSource(compact) || firstMatch(compact, [
         /([^，。；;\n]{1,30}?)(?:让我|叫我|要求我|安排我)/,
         /(?:assigned by|from)\s+([^,.;\n]+)/i,
         /([^,.;\n]{1,30}?)\s+(?:asked|told) me to/i
       ]);
-
       result.background = firstMatch(compact, [
         /(?:背景|原因)(?:是|为)?[：:\s]*([^，。；;\n]+)/i,
         /(?:background|because)(?: is|:)?\s*([^,.;\n]+)/i
       ]);
+      result.receivedDate = /(?:今天收到|今天接到|received today)/i.test(compact) ? dateKey(new Date()) : "";
 
-      result.receivedDate =
-        /(?:今天收到|今天接到|received today)/i.test(compact)
-          ? dateKey(new Date())
-          : "";
-
-      let titleText = compact
-        .replace(/^.*?(?:让我|叫我|要求我|安排我)/, "")
-        .replace(/^.*?\b(?:asked|told) me to\b/i, "");
-
-      titleText = titleText.split(
-        /[,，。；;](?=.*(?:优先级|priority|截止|deadline|due|进行中|in progress|下一步|next step|反馈|feedback|最终结果|result))/i
-      )[0];
-
-      titleText = titleText.replace(/^(今天|明天|后天)\s*/, "").trim();
-      result.title = titleText.replace(/[，。；;,.]+$/, "");
-
-      result.project = firstMatch(compact, [
-        /(?:项目|分类)(?:是|为)?[：:\s]*([^，。；;\n]+)/i,
-        /(?:project|category)(?: is|:)?\s*([^,.;\n]+)/i,
-        /跟进(.+?)(?:修改|更新|确认|问题)(?:[，。；;]|$)/
+      result.title = extractRuleTitle(compact);
+      result.project = extractRuleProject(compact) || firstMatch(compact, [
+        /(?:project|category)(?: is|:)?\s*([^,.;\n]+)/i
       ]);
 
-      const workflowSentences = compact
-        .split(/[。;；\n]/)
-        .filter(sentence =>
-          /(?:进展(?:是|为|：|:)|处理记录|已做|沟通记录|workflow notes?|progress notes?)/i.test(sentence)
-        );
-
+      const workflowSentences = compact.split(/[。;；\n]/).filter(sentence => /(?:进展(?:是|为|：|:)|处理记录|已做|沟通记录|workflow notes?|progress notes?)/i.test(sentence));
       result.workflowNotes = workflowSentences.join("；");
       return normalizeParsedResult(result);
     }
 
+    // Rule Parse regression examples:
+    // 老板让我明天跟进俄罗斯水槽说明书修改，项目是俄罗斯水槽，优先级高，目前进行中，下一步整理俄文问题清单
+    // 客户要求后天确认俄罗斯标签内容，项目是包装标签，优先级高，当前待办
+    // 海尔要求今天核对水槽说明书俄文，项目是俄罗斯水槽说明书，目前进行中，下一步输出问题清单
+
     function AISettingsModal({ settings, onSave, onClose }) {
       const [form, setForm] = useState(settings);
-      const change = event =>
-        setForm({ ...form, [event.target.name]: event.target.value });
-
+      const change = event => setForm({ ...form, [event.target.name]: event.target.value });
       const save = event => {
         event.preventDefault();
-        const next = {
-          provider: form.provider.trim() || "OpenAI-compatible",
-          endpoint: form.endpoint.trim(),
-          apiKey: form.apiKey.trim(),
-          model: form.model.trim()
-        };
+        const next = { provider: form.provider.trim() || "OpenAI-compatible", endpoint: form.endpoint.trim(), apiKey: form.apiKey.trim(), model: form.model.trim() };
         localStorage.setItem(AI_SETTINGS_KEY, JSON.stringify(next));
         onSave(next);
         onClose();
       };
 
       return (
-        <div
-          className="modal-backdrop"
-          onMouseDown={event =>
-            event.target === event.currentTarget && onClose()
-          }
-        >
+        <div className="modal-backdrop" onMouseDown={event => event.target === event.currentTarget && onClose()}>
           <form className="modal settings-modal" onSubmit={save}>
             <div className="modal-header">
-              <div>
-                <h2>AI settings</h2>
-                <p>Configure the service used by Smart Quick Entry.</p>
-              </div>
-              <button
-                type="button"
-                className="close-button"
-                aria-label="Close"
-                onClick={onClose}
-              >
-                ×
-              </button>
+              <div><h2>AI settings</h2><p>Configure the service used by Smart Quick Entry.</p></div>
+              <button type="button" className="close-button" aria-label="Close" onClick={onClose}>×</button>
             </div>
-
             <div className="form-body">
-              <p className="settings-warning">
-                Do not use a shared or public API key. The key is stored only in
-                this browser.
-              </p>
-
+              <p className="settings-warning">Do not use a shared or public API key. The key is stored only in this browser.</p>
               <div className="form-grid">
-                <div className="field full">
-                  <label htmlFor="aiProvider">AI Provider</label>
-                  <input
-                    id="aiProvider"
-                    name="provider"
-                    value={form.provider}
-                    onChange={change}
-                    placeholder="OpenAI-compatible"
-                  />
-                </div>
-
-                <div className="field full">
-                  <label htmlFor="aiEndpoint">API endpoint</label>
-                  <input
-                    id="aiEndpoint"
-                    name="endpoint"
-                    value={form.endpoint}
-                    onChange={change}
-                    placeholder="https://api.example.com/v1/chat/completions"
-                  />
-                </div>
-
-                <div className="field full">
-                  <label htmlFor="aiKey">API key</label>
-                  <input
-                    id="aiKey"
-                    type="password"
-                    name="apiKey"
-                    value={form.apiKey}
-                    onChange={change}
-                    autoComplete="off"
-                  />
-                </div>
-
-                <div className="field full">
-                  <label htmlFor="aiModel">Model name</label>
-                  <input
-                    id="aiModel"
-                    name="model"
-                    value={form.model}
-                    onChange={change}
-                    placeholder="Your provider's model name"
-                  />
-                </div>
+                <div className="field full"><label htmlFor="aiProvider">AI Provider</label><input id="aiProvider" name="provider" value={form.provider} onChange={change} placeholder="OpenAI-compatible" /></div>
+                <div className="field full"><label htmlFor="aiEndpoint">API endpoint</label><input id="aiEndpoint" name="endpoint" value={form.endpoint} onChange={change} placeholder="https://api.example.com/v1/chat/completions" /></div>
+                <div className="field full"><label htmlFor="aiKey">API key</label><input id="aiKey" type="password" name="apiKey" value={form.apiKey} onChange={change} autoComplete="off" /></div>
+                <div className="field full"><label htmlFor="aiModel">Model name</label><input id="aiModel" name="model" value={form.model} onChange={change} placeholder="Your provider's model name" /></div>
               </div>
             </div>
-
-            <div className="modal-actions">
-              <div></div>
-              <div className="settings-actions">
-                <button
-                  type="button"
-                  className="btn btn-secondary"
-                  onClick={onClose}
-                >
-                  Cancel
-                </button>
-                <button className="btn btn-primary">Save settings</button>
-              </div>
-            </div>
+            <div className="modal-actions"><div></div><div className="settings-actions"><button type="button" className="btn btn-secondary" onClick={onClose}>Cancel</button><button className="btn btn-primary">Save settings</button></div></div>
           </form>
         </div>
       );
     }
 
-    function TaskModal({
-      task,
-      isNew,
-      onSave,
-      onDelete,
-      onClose,
-      aiSettings,
-      onOpenAISettings,
-      quickEntryStart
-    }) {
+    function TaskModal({ task, isNew, onSave, onDelete, onClose, aiSettings, onOpenAISettings, quickEntryStart }) {
       const [form, setForm] = useState(task);
       const [quickText, setQuickText] = useState("");
       const [parsedResult, setParsedResult] = useState(null);
@@ -829,23 +736,17 @@
       const [parsing, setParsing] = useState(false);
       const [listening, setListening] = useState(false);
       const quickEntryRef = useRef(null);
-
       useEffect(() => {
-        const closeOnEscape = event =>
-          event.key === "Escape" && onClose();
+        const closeOnEscape = event => event.key === "Escape" && onClose();
         window.addEventListener("keydown", closeOnEscape);
         return () => window.removeEventListener("keydown", closeOnEscape);
       }, [onClose]);
 
       useEffect(() => {
-        if (quickEntryStart) {
-          setTimeout(() => quickEntryRef.current?.focus(), 0);
-        }
+        if (quickEntryStart) setTimeout(() => quickEntryRef.current?.focus(), 0);
       }, [quickEntryStart]);
 
-      const change = event =>
-        setForm({ ...form, [event.target.name]: event.target.value });
-
+      const change = event => setForm({ ...form, [event.target.name]: event.target.value });
       const submit = event => {
         event.preventDefault();
         if (!form.title.trim()) return;
@@ -863,12 +764,9 @@
 
       const parseWithAI = async () => {
         if (!aiSettings.endpoint || !aiSettings.apiKey || !aiSettings.model) {
-          setParseMessage(
-            "AI is not configured yet. Please add your API endpoint and API key in settings."
-          );
+          setParseMessage("AI is not configured yet. Please add your API endpoint and API key in settings.");
           return;
         }
-
         if (!quickText.trim()) {
           setParseMessage("Enter or dictate a task description first.");
           return;
@@ -876,27 +774,12 @@
 
         setParsing(true);
         setParseMessage("");
-
-        const schema = Object.fromEntries(
-          PARSED_FIELDS.map(([key]) => [key, ""])
-        );
-
-        const systemPrompt =
-          `You extract task fields from Chinese or English text. ` +
-          `Return one JSON object only, with exactly this schema: ${JSON.stringify(schema)}. ` +
-          `If information is not explicitly stated, use an empty string. ` +
-          `Never invent information. Dates must be YYYY-MM-DD. ` +
-          `Today is ${dateKey(new Date())}. ` +
-          `Priority must be High, Medium, Low, or empty. ` +
-          `Status must be New, To Do, In Progress, Waiting for Feedback, Done, Archived, or empty.`;
-
+        const schema = Object.fromEntries(PARSED_FIELDS.map(([key]) => [key, ""]));
+        const systemPrompt = `You extract task fields from Chinese or English text. Return one JSON object only, with exactly this schema: ${JSON.stringify(schema)}. If information is not explicitly stated, use an empty string. Never invent information. Dates must be YYYY-MM-DD. Today is ${dateKey(new Date())}. Priority must be High, Medium, Low, or empty. Status must be New, To Do, In Progress, Waiting for Feedback, Done, Archived, or empty.`;
         try {
           const response = await fetch(aiSettings.endpoint, {
             method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "Authorization": `Bearer ${aiSettings.apiKey}`
-            },
+            headers: { "Content-Type": "application/json", "Authorization": `Bearer ${aiSettings.apiKey}` },
             body: JSON.stringify({
               model: aiSettings.model,
               messages: [
@@ -907,39 +790,18 @@
               response_format: { type: "json_object" }
             })
           });
-
-          if (!response.ok) {
-            throw new Error(`API request failed (${response.status})`);
-          }
-
+          if (!response.ok) throw new Error(`API request failed (${response.status})`);
           const data = await response.json();
-          let content =
-            data.choices?.[0]?.message?.content ?? data.output_text;
-
+          let content = data.choices?.[0]?.message?.content ?? data.output_text;
           if (!content && Array.isArray(data.output)) {
-            content = data.output
-              .flatMap(item => item.content || [])
-              .map(item => item.text || item.content || "")
-              .join("");
+            content = data.output.flatMap(item => item.content || []).map(item => item.text || item.content || "").join("");
           }
-
-          if (typeof content === "object") {
-            content = JSON.stringify(content);
-          }
-
-          content = String(content || "")
-            .replace(/^```(?:json)?\s*/i, "")
-            .replace(/\s*```$/, "")
-            .trim();
-
-          setParsedResult(
-            normalizeParsedResult(JSON.parse(content))
-          );
+          if (typeof content === "object") content = JSON.stringify(content);
+          content = String(content || "").replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
+          setParsedResult(normalizeParsedResult(JSON.parse(content)));
         } catch (error) {
           console.error("AI parsing failed", error);
-          setParseMessage(
-            `AI Parse failed: ${error.message}. Check the endpoint, model, key, and browser CORS support.`
-          );
+          setParseMessage(`AI Parse failed: ${error.message}. Check the endpoint, model, key, and browser CORS support.`);
         } finally {
           setParsing(false);
         }
@@ -947,33 +809,17 @@
 
       const applyParsed = () => {
         if (!parsedResult) return;
-
         const next = { ...form };
         const mapping = {
-          title: "title",
-          source: "source",
-          project: "project",
-          background: "background",
-          receivedDate: "receivedDate",
-          dueDate: "deadline",
-          priority: "priority",
-          status: "status",
-          nextAction: "nextAction",
-          workflowNotes: "processNotes",
-          feedback: "feedbackRecords",
-          finalResult: "finalResult"
+          title: "title", source: "source", project: "project", background: "background",
+          receivedDate: "receivedDate", dueDate: "deadline", priority: "priority", status: "status",
+          nextAction: "nextAction", workflowNotes: "processNotes", feedback: "feedbackRecords", finalResult: "finalResult"
         };
-
         Object.entries(mapping).forEach(([parsedKey, formKey]) => {
-          if (parsedResult[parsedKey]) {
-            next[formKey] = parsedResult[parsedKey];
-          }
+          if (parsedResult[parsedKey]) next[formKey] = parsedResult[parsedKey];
         });
-
         setForm(next);
-        setParseMessage(
-          "Parsed values applied. Review and edit the form before saving."
-        );
+        setParseMessage("Parsed values applied. Review and edit the form before saving.");
       };
 
       const clearQuickEntry = () => {
@@ -984,349 +830,126 @@
       };
 
       const startDictation = () => {
-        const SpeechRecognition =
-          window.SpeechRecognition || window.webkitSpeechRecognition;
-
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
         if (!SpeechRecognition) {
-          setParseMessage(
-            "Speech dictation is not supported in this browser. You can type or paste the paragraph instead."
-          );
+          setParseMessage("Speech dictation is not supported in this browser. You can type or paste the paragraph instead.");
           return;
         }
-
         const recognition = new SpeechRecognition();
         recognition.lang = navigator.language || "zh-CN";
         recognition.interimResults = false;
         recognition.continuous = false;
         recognition.onstart = () => setListening(true);
         recognition.onend = () => setListening(false);
-        recognition.onerror = event => {
-          setListening(false);
-          setParseMessage(`Dictation failed: ${event.error}`);
-        };
+        recognition.onerror = event => { setListening(false); setParseMessage(`Dictation failed: ${event.error}`); };
         recognition.onresult = event => {
-          const transcript = Array.from(event.results)
-            .map(result => result[0].transcript)
-            .join(" ");
-          setQuickText(
-            current => `${current}${current ? " " : ""}${transcript}`
-          );
+          const transcript = Array.from(event.results).map(result => result[0].transcript).join(" ");
+          setQuickText(current => `${current}${current ? " " : ""}${transcript}`);
         };
         recognition.start();
       };
 
       return (
-        <div
-          className="modal-backdrop"
-          onMouseDown={event =>
-            event.target === event.currentTarget && onClose()
-          }
-        >
+        <div className="modal-backdrop" onMouseDown={event => event.target === event.currentTarget && onClose()}>
           <form className="modal" onSubmit={submit}>
             <div className="modal-header">
               <div>
                 <h2>{isNew ? "Add a work task" : "Task details"}</h2>
-                <p>
-                  Record only what is useful now. You can return and add more
-                  detail later.
-                </p>
+                <p>Record only what is useful now. You can return and add more detail later.</p>
               </div>
-              <button
-                type="button"
-                className="close-button"
-                aria-label="Close"
-                onClick={onClose}
-              >
-                ×
-              </button>
+              <button type="button" className="close-button" aria-label="Close" onClick={onClose}>×</button>
             </div>
-
             <div className="form-body">
               <div className="form-grid">
                 <section className="quick-entry">
                   <h3>Smart Quick Entry</h3>
-                  <p className="quick-entry-intro">
-                    Type, paste, or dictate a natural-language task description.
-                    Parsing creates a preview only; your form changes after you
-                    select Apply parsed result.
-                  </p>
-
-                  <textarea
-                    ref={quickEntryRef}
-                    value={quickText}
-                    onChange={event => setQuickText(event.target.value)}
-                    placeholder="Example: 老板让我今天跟进俄罗斯水槽说明书修改，优先级高，截止到7月10日，目前进行中，下一步整理问题清单，客户反馈说俄文用词需要再确认。"
-                  />
-
+                  <p className="quick-entry-intro">Type, paste, or dictate a natural-language task description. Parsing creates a preview only; your form changes after you select Apply parsed result.</p>
+                  <textarea ref={quickEntryRef} value={quickText} onChange={event => setQuickText(event.target.value)} placeholder="Example: 老板让我今天跟进俄罗斯水槽说明书修改，优先级高，截止到7月10日，目前进行中，下一步整理问题清单，客户反馈说俄文用词需要再确认。" />
                   <div className="quick-actions">
-                    <button
-                      type="button"
-                      className="btn btn-primary"
-                      onClick={parseWithAI}
-                      disabled={parsing}
-                    >
-                      {parsing ? "AI Parsing…" : "AI Parse"}
-                    </button>
-                    <button
-                      type="button"
-                      className="btn btn-secondary"
-                      onClick={parseWithRules}
-                    >
-                      Rule Parse
-                    </button>
-                    <button
-                      type="button"
-                      className={`btn btn-secondary${listening ? " mic-active" : ""}`}
-                      onClick={startDictation}
-                    >
-                      {listening ? "Listening…" : "Dictate"}
-                    </button>
-                    <button
-                      type="button"
-                      className="btn btn-secondary"
-                      onClick={clearQuickEntry}
-                    >
-                      Clear
-                    </button>
-                    <button
-                      type="button"
-                      className="btn btn-secondary"
-                      onClick={onOpenAISettings}
-                    >
-                      AI Settings
-                    </button>
+                    <button type="button" className="btn btn-primary" onClick={parseWithAI} disabled={parsing}>{parsing ? "AI Parsing…" : "AI Parse"}</button>
+                    <button type="button" className="btn btn-secondary" onClick={parseWithRules}>Rule Parse</button>
+                    <button type="button" className={`btn btn-secondary${listening ? " mic-active" : ""}`} onClick={startDictation}>{listening ? "Listening…" : "Dictate"}</button>
+                    <button type="button" className="btn btn-secondary" onClick={clearQuickEntry}>Clear</button>
+                    <button type="button" className="btn btn-secondary" onClick={onOpenAISettings}>AI Settings</button>
                   </div>
-
-                  {parseMessage && (
-                    <p className="parse-message">{parseMessage}</p>
-                  )}
-
+                  {parseMessage && <p className="parse-message">{parseMessage}</p>}
                   {parsedResult && (
                     <div className="parsed-preview">
                       <h4>Parsed result preview</h4>
                       <div className="preview-grid">
-                        {PARSED_FIELDS
-                          .filter(([key]) => parsedResult[key])
-                          .map(([key, label]) => (
-                            <div className="preview-item" key={key}>
-                              <strong>{label}:</strong>{" "}
-                              {key === "status"
-                                ? statusTitle(parsedResult[key])
-                                : parsedResult[key]}
-                            </div>
-                          ))}
-
-                        {!PARSED_FIELDS.some(
-                          ([key]) => parsedResult[key]
-                        ) && (
-                          <div className="preview-item">
-                            No task fields were detected.
-                          </div>
-                        )}
+                        {PARSED_FIELDS.filter(([key]) => parsedResult[key]).map(([key, label]) => (
+                          <div className="preview-item" key={key}><strong>{label}:</strong> {key === "status" ? statusTitle(parsedResult[key]) : parsedResult[key]}</div>
+                        ))}
+                        {!PARSED_FIELDS.some(([key]) => parsedResult[key]) && <div className="preview-item">No task fields were detected.</div>}
                       </div>
-
-                      <div className="quick-actions">
-                        <button
-                          type="button"
-                          className="btn btn-primary"
-                          onClick={applyParsed}
-                        >
-                          Apply parsed result
-                        </button>
-                      </div>
+                      <div className="quick-actions"><button type="button" className="btn btn-primary" onClick={applyParsed}>Apply parsed result</button></div>
                     </div>
                   )}
                 </section>
-
                 <div className="field full">
-                  <label htmlFor="title">
-                    Task title <span className="required">*</span>
-                  </label>
-                  <input
-                    id="title"
-                    name="title"
-                    value={form.title}
-                    onChange={change}
-                    placeholder="What needs to be done?"
-                    autoFocus
-                  />
+                  <label htmlFor="title">Task title <span className="required">*</span></label>
+                  <input id="title" name="title" value={form.title} onChange={change} placeholder="What needs to be done?" autoFocus />
                 </div>
-
                 <div className="field">
-                  <label htmlFor="source">
-                    Task source / who assigned it
-                  </label>
-                  <input
-                    id="source"
-                    name="source"
-                    value={form.source}
-                    onChange={change}
-                    placeholder="e.g. Manager, client, self"
-                  />
+                  <label htmlFor="source">Task source / who assigned it</label>
+                  <input id="source" name="source" value={form.source} onChange={change} placeholder="e.g. Manager, client, self" />
                 </div>
-
                 <div className="field">
                   <label htmlFor="project">Project or category</label>
-                  <input
-                    id="project"
-                    name="project"
-                    value={form.project}
-                    onChange={change}
-                    placeholder="e.g. Website launch"
-                  />
+                  <input id="project" name="project" value={form.project} onChange={change} placeholder="e.g. Website launch" />
                 </div>
-
                 <div className="field full">
                   <label htmlFor="background">Task background</label>
-                  <textarea
-                    id="background"
-                    name="background"
-                    value={form.background}
-                    onChange={change}
-                    placeholder="Why is this task needed? Add the request, context, or expected outcome…"
-                  />
+                  <textarea id="background" name="background" value={form.background} onChange={change} placeholder="Why is this task needed? Add the request, context, or expected outcome…" />
                 </div>
-
                 <div className="field">
                   <label htmlFor="receivedDate">Received date</label>
-                  <input
-                    id="receivedDate"
-                    type="date"
-                    name="receivedDate"
-                    value={form.receivedDate}
-                    onChange={change}
-                  />
+                  <input id="receivedDate" type="date" name="receivedDate" value={form.receivedDate} onChange={change} />
                 </div>
-
                 <div className="field">
                   <label htmlFor="deadline">Deadline</label>
-                  <input
-                    id="deadline"
-                    type="date"
-                    name="deadline"
-                    value={form.deadline}
-                    onChange={change}
-                  />
+                  <input id="deadline" type="date" name="deadline" value={form.deadline} onChange={change} />
                 </div>
-
                 <div className="field">
                   <label htmlFor="priority">Priority</label>
-                  <select
-                    id="priority"
-                    name="priority"
-                    value={form.priority}
-                    onChange={change}
-                  >
-                    {PRIORITIES.map(priority => (
-                      <option key={priority}>{priority}</option>
-                    ))}
+                  <select id="priority" name="priority" value={form.priority} onChange={change}>
+                    {PRIORITIES.map(priority => <option key={priority}>{priority}</option>)}
                   </select>
                 </div>
-
                 <div className="field">
                   <label htmlFor="status">Current progress</label>
-                  <select
-                    id="status"
-                    name="status"
-                    value={form.status}
-                    onChange={change}
-                  >
-                    {COLUMNS.map(column => (
-                      <option key={column.id} value={column.id}>
-                        {column.title}
-                      </option>
-                    ))}
+                  <select id="status" name="status" value={form.status} onChange={change}>
+                    {COLUMNS.map(column => <option key={column.id} value={column.id}>{column.title}</option>)}
                   </select>
                 </div>
-
                 <div className="field full">
                   <label htmlFor="nextAction">Next action</label>
-                  <textarea
-                    id="nextAction"
-                    name="nextAction"
-                    value={form.nextAction}
-                    onChange={change}
-                    placeholder="What is the very next step?"
-                  />
+                  <textarea id="nextAction" name="nextAction" value={form.nextAction} onChange={change} placeholder="What is the very next step?" />
                 </div>
-
                 <div className="field full">
                   <label htmlFor="processNotes">Work process notes</label>
-                  <textarea
-                    className="long"
-                    id="processNotes"
-                    name="processNotes"
-                    value={form.processNotes}
-                    onChange={change}
-                    placeholder="Add dated notes about decisions, progress, conversations, or blockers…"
-                  />
+                  <textarea className="long" id="processNotes" name="processNotes" value={form.processNotes} onChange={change} placeholder="Add dated notes about decisions, progress, conversations, or blockers…" />
                 </div>
-
                 <div className="field full">
                   <label htmlFor="feedbackRecords">Feedback records</label>
-                  <textarea
-                    className="long"
-                    id="feedbackRecords"
-                    name="feedbackRecords"
-                    value={form.feedbackRecords}
-                    onChange={change}
-                    placeholder="Record who gave feedback, when, and what changed…"
-                  />
+                  <textarea className="long" id="feedbackRecords" name="feedbackRecords" value={form.feedbackRecords} onChange={change} placeholder="Record who gave feedback, when, and what changed…" />
                 </div>
-
                 <div className="field full">
                   <label htmlFor="finalResult">Final result</label>
-                  <textarea
-                    className="long"
-                    id="finalResult"
-                    name="finalResult"
-                    value={form.finalResult}
-                    onChange={change}
-                    placeholder="What was delivered or achieved? Add the outcome when the task is complete."
-                  />
+                  <textarea className="long" id="finalResult" name="finalResult" value={form.finalResult} onChange={change} placeholder="What was delivered or achieved? Add the outcome when the task is complete." />
                 </div>
-
                 <div className="field full">
                   <label htmlFor="links">Links or attachment notes</label>
-                  <textarea
-                    id="links"
-                    name="links"
-                    value={form.links}
-                    onChange={change}
-                    placeholder="Paste document links, ticket URLs, file paths, or attachment notes here…"
-                  />
-                  <p className="hint">
-                    This simple version stores text and links, not uploaded
-                    files.
-                  </p>
+                  <textarea id="links" name="links" value={form.links} onChange={change} placeholder="Paste document links, ticket URLs, file paths, or attachment notes here…" />
+                  <p className="hint">This simple version stores text and links, not uploaded files.</p>
                 </div>
               </div>
             </div>
-
             <div className="modal-actions">
-              <div>
-                {!isNew && (
-                  <button
-                    type="button"
-                    className="btn btn-danger"
-                    onClick={() => onDelete(form.id)}
-                  >
-                    Delete task
-                  </button>
-                )}
-              </div>
-
+              <div>{!isNew && <button type="button" className="btn btn-danger" onClick={() => onDelete(form.id)}>Delete task</button>}</div>
               <div className="action-group">
-                <button
-                  type="button"
-                  className="btn btn-secondary"
-                  onClick={onClose}
-                >
-                  Cancel
-                </button>
-                <button type="submit" className="btn btn-primary">
-                  Save task
-                </button>
+                <button type="button" className="btn btn-secondary" onClick={onClose}>Cancel</button>
+                <button type="submit" className="btn btn-primary">Save task</button>
               </div>
             </div>
           </form>
@@ -1334,113 +957,34 @@
       );
     }
 
-    function TaskCard({
-      task,
-      onOpen,
-      onDelete,
-      onDragStart,
-      onDragEnd
-    }) {
+    function TaskCard({ task, onOpen, onDelete, onDragStart, onDragEnd }) {
       return (
-        <article
-          className="task-card"
-          draggable
-          onClick={() => onOpen(task)}
-          onDragStart={event => onDragStart(event, task.id)}
-          onDragEnd={onDragEnd}
-        >
-          <button
-            className="card-delete"
-            aria-label={`Delete ${task.title}`}
-            onClick={event => {
-              event.stopPropagation();
-              onDelete(task.id);
-            }}
-          >
-            ×
-          </button>
-
+        <article className="task-card" draggable onClick={() => onOpen(task)} onDragStart={event => onDragStart(event, task.id)} onDragEnd={onDragEnd}>
+          <button className="card-delete" aria-label={`Delete ${task.title}`} onClick={event => { event.stopPropagation(); onDelete(task.id); }}>×</button>
           <h3 className="card-title">{task.title}</h3>
-
           <div className="card-meta">
-            <span
-              className={`pill priority-${task.priority.toLowerCase()}`}
-            >
-              {task.priority}
-            </span>
+            <span className={`pill priority-${task.priority.toLowerCase()}`}>{task.priority}</span>
             {task.project && <span className="pill">{task.project}</span>}
           </div>
-
-          {task.source && (
-            <p className="card-line">
-              <strong>From:</strong> {task.source}
-            </p>
-          )}
-
-          {task.deadline && (
-            <p className="card-line">
-              <strong>Due:</strong> {task.deadline}
-            </p>
-          )}
-
-          {task.nextAction && (
-            <p className="card-line">
-              <strong>Next:</strong> {task.nextAction}
-            </p>
-          )}
+          {task.source && <p className="card-line"><strong>From:</strong> {task.source}</p>}
+          {task.deadline && <p className="card-line"><strong>Due:</strong> {task.deadline}</p>}
+          {task.nextAction && <p className="card-line"><strong>Next:</strong> {task.nextAction}</p>}
         </article>
       );
     }
 
-    function Column({
-      column,
-      tasks,
-      onAdd,
-      onOpen,
-      onDelete,
-      onDragStart,
-      onDragEnd,
-      onDragOver,
-      onDrop,
-      isOver
-    }) {
+    function Column({ column, tasks, onAdd, onOpen, onDelete, onDragStart, onDragEnd, onDragOver, onDrop, isOver }) {
       return (
-        <section
-          className={`column${isOver ? " drag-over" : ""}`}
-          onDragOver={event => onDragOver(event, column.id)}
-          onDrop={event => onDrop(event, column.id)}
-        >
+        <section className={`column${isOver ? " drag-over" : ""}`} onDragOver={event => onDragOver(event, column.id)} onDrop={event => onDrop(event, column.id)}>
           <div className="column-header">
-            <div className="column-title">
-              <span
-                className="column-dot"
-                style={{ background: column.color }}
-              ></span>
-              {column.title}
-            </div>
+            <div className="column-title"><span className="column-dot" style={{ background: column.color }}></span>{column.title}</div>
             <span className="column-count">{tasks.length}</span>
           </div>
-
           <div className="card-list">
             {!tasks.length && <div className="empty">No tasks here</div>}
-            {tasks.map(task => (
-              <TaskCard
-                key={task.id}
-                task={task}
-                onOpen={onOpen}
-                onDelete={onDelete}
-                onDragStart={onDragStart}
-                onDragEnd={onDragEnd}
-              />
-            ))}
+            {tasks.map(task => <TaskCard key={task.id} task={task} onOpen={onOpen} onDelete={onDelete} onDragStart={onDragStart} onDragEnd={onDragEnd} />)}
           </div>
-
-          <button
-            className="add-task"
-            onClick={() => onAdd(column.id)}
-          >
-            + Add task
-          </button>
+          <button className="add-task" onClick={() => onAdd(column.id)}>+ Add task</button>
         </section>
       );
     }
@@ -1457,96 +1001,42 @@
       const [sortBy, setSortBy] = useState("updatedAt");
       const [sortDirection, setSortDirection] = useState("desc");
 
-      const projects = useMemo(
-        () =>
-          [...new Set(
-            tasks.map(task => task.project.trim()).filter(Boolean)
-          )].sort((a, b) => a.localeCompare(b)),
-        [tasks]
-      );
+      const projects = useMemo(() => [...new Set(tasks.map(task => task.project.trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b)), [tasks]);
 
       const filteredTasks = useMemo(() => {
         const keyword = search.trim().toLowerCase();
         const priorityOrder = { Low: 1, Medium: 2, High: 3 };
-        const statusOrder = Object.fromEntries(
-          COLUMNS.map((column, index) => [column.id, index])
-        );
-
+        const statusOrder = Object.fromEntries(COLUMNS.map((column, index) => [column.id, index]));
         const valueForSort = task => {
-          if (sortBy === "createdAt") {
-            return createdDate(task)?.getTime() || 0;
-          }
-          if (sortBy === "deadline") {
-            return toDate(task.deadline)?.getTime() || 0;
-          }
-          if (sortBy === "updatedAt") {
-            return toDate(task.updatedAt)?.getTime() || 0;
-          }
-          if (sortBy === "status") {
-            return statusOrder[task.status] ?? 99;
-          }
-          if (sortBy === "priority") {
-            return priorityOrder[task.priority] || 0;
-          }
+          if (sortBy === "createdAt") return createdDate(task)?.getTime() || 0;
+          if (sortBy === "deadline") return toDate(task.deadline)?.getTime() || 0;
+          if (sortBy === "updatedAt") return toDate(task.updatedAt)?.getTime() || 0;
+          if (sortBy === "status") return statusOrder[task.status] ?? 99;
+          if (sortBy === "priority") return priorityOrder[task.priority] || 0;
           return 0;
         };
 
         return tasks
           .filter(task => {
-            const searchable = [
-              task.title,
-              task.project,
-              task.source,
-              task.background,
-              task.nextAction,
-              task.processNotes,
-              task.feedbackRecords,
-              task.finalResult,
-              task.links
-            ].join(" ").toLowerCase();
-
+            const searchable = [task.title, task.project, task.source, task.background, task.nextAction, task.processNotes, task.feedbackRecords, task.finalResult, task.links].join(" ").toLowerCase();
             const created = dateKey(createdDate(task));
-
             if (keyword && !searchable.includes(keyword)) return false;
             if (status && task.status !== status) return false;
             if (project && task.project !== project) return false;
             if (priority && task.priority !== priority) return false;
             if (dateFrom && (!created || created < dateFrom)) return false;
             if (dateTo && (!created || created > dateTo)) return false;
-            if (
-              unfinishedOnly &&
-              ["done", "archived"].includes(task.status)
-            ) return false;
+            if (unfinishedOnly && ["done", "archived"].includes(task.status)) return false;
             if (feedbackOnly && task.status !== "feedback") return false;
-
             return true;
           })
           .sort((a, b) => {
             const first = valueForSort(a);
             const second = valueForSort(b);
-            const difference =
-              typeof first === "string"
-                ? first.localeCompare(second)
-                : first - second;
-
-            return (
-              (sortDirection === "asc" ? difference : -difference) ||
-              a.title.localeCompare(b.title)
-            );
+            const difference = typeof first === "string" ? first.localeCompare(second) : first - second;
+            return (sortDirection === "asc" ? difference : -difference) || a.title.localeCompare(b.title);
           });
-      }, [
-        tasks,
-        search,
-        status,
-        project,
-        priority,
-        dateFrom,
-        dateTo,
-        unfinishedOnly,
-        feedbackOnly,
-        sortBy,
-        sortDirection
-      ]);
+      }, [tasks, search, status, project, priority, dateFrom, dateTo, unfinishedOnly, feedbackOnly, sortBy, sortDirection]);
 
       const openFromKeyboard = (event, task) => {
         if (event.key === "Enter" || event.key === " ") {
@@ -1560,112 +1050,47 @@
           <div className="filters">
             <div className="filter-field">
               <label htmlFor="tableSearch">Search keyword</label>
-              <input
-                id="tableSearch"
-                value={search}
-                onChange={event => setSearch(event.target.value)}
-                placeholder="Search titles, notes, feedback, results…"
-              />
+              <input id="tableSearch" value={search} onChange={event => setSearch(event.target.value)} placeholder="Search titles, notes, feedback, results…" />
             </div>
-
             <div className="filter-field">
               <label htmlFor="statusFilter">Status</label>
-              <select
-                id="statusFilter"
-                value={status}
-                onChange={event => setStatus(event.target.value)}
-              >
+              <select id="statusFilter" value={status} onChange={event => setStatus(event.target.value)}>
                 <option value="">All statuses</option>
-                {COLUMNS.map(column => (
-                  <option key={column.id} value={column.id}>
-                    {column.title}
-                  </option>
-                ))}
+                {COLUMNS.map(column => <option key={column.id} value={column.id}>{column.title}</option>)}
               </select>
             </div>
-
             <div className="filter-field">
               <label htmlFor="projectFilter">Project / Category</label>
-              <select
-                id="projectFilter"
-                value={project}
-                onChange={event => setProject(event.target.value)}
-              >
+              <select id="projectFilter" value={project} onChange={event => setProject(event.target.value)}>
                 <option value="">All projects</option>
-                {projects.map(item => (
-                  <option key={item} value={item}>{item}</option>
-                ))}
+                {projects.map(item => <option key={item} value={item}>{item}</option>)}
               </select>
             </div>
-
             <div className="filter-field">
               <label htmlFor="priorityFilter">Priority</label>
-              <select
-                id="priorityFilter"
-                value={priority}
-                onChange={event => setPriority(event.target.value)}
-              >
+              <select id="priorityFilter" value={priority} onChange={event => setPriority(event.target.value)}>
                 <option value="">All priorities</option>
-                {PRIORITIES.map(item => (
-                  <option key={item}>{item}</option>
-                ))}
+                {PRIORITIES.map(item => <option key={item}>{item}</option>)}
               </select>
             </div>
-
             <div className="date-filters">
               <div className="filter-field">
                 <label htmlFor="dateFrom">Created from</label>
-                <input
-                  id="dateFrom"
-                  type="date"
-                  value={dateFrom}
-                  onChange={event => setDateFrom(event.target.value)}
-                />
+                <input id="dateFrom" type="date" value={dateFrom} onChange={event => setDateFrom(event.target.value)} />
               </div>
-
               <div className="filter-field">
                 <label htmlFor="dateTo">Created to</label>
-                <input
-                  id="dateTo"
-                  type="date"
-                  value={dateTo}
-                  onChange={event => setDateTo(event.target.value)}
-                />
+                <input id="dateTo" type="date" value={dateTo} onChange={event => setDateTo(event.target.value)} />
               </div>
             </div>
-
             <div className="filter-checks">
-              <label className="check-label">
-                <input
-                  type="checkbox"
-                  checked={unfinishedOnly}
-                  onChange={event =>
-                    setUnfinishedOnly(event.target.checked)
-                  }
-                />
-                Show only unfinished tasks
-              </label>
-
-              <label className="check-label">
-                <input
-                  type="checkbox"
-                  checked={feedbackOnly}
-                  onChange={event =>
-                    setFeedbackOnly(event.target.checked)
-                  }
-                />
-                Show only tasks waiting for feedback
-              </label>
+              <label className="check-label"><input type="checkbox" checked={unfinishedOnly} onChange={event => setUnfinishedOnly(event.target.checked)} /> Show only unfinished tasks</label>
+              <label className="check-label"><input type="checkbox" checked={feedbackOnly} onChange={event => setFeedbackOnly(event.target.checked)} /> Show only tasks waiting for feedback</label>
             </div>
-
             <div className="sort-controls">
               <div className="filter-field">
                 <label htmlFor="sortBy">Sort by</label>
-                <select
-                  id="sortBy"
-                  value={sortBy}
-                  onChange={event => setSortBy(event.target.value)}
-                >
+                <select id="sortBy" value={sortBy} onChange={event => setSortBy(event.target.value)}>
                   <option value="createdAt">Created date</option>
                   <option value="deadline">Due date</option>
                   <option value="updatedAt">Last updated</option>
@@ -1673,69 +1098,27 @@
                   <option value="priority">Priority</option>
                 </select>
               </div>
-
-              <button
-                className="btn btn-secondary sort-direction"
-                onClick={() =>
-                  setSortDirection(current =>
-                    current === "asc" ? "desc" : "asc"
-                  )
-                }
-              >
-                {sortDirection === "asc" ? "Ascending" : "Descending"}
-              </button>
+              <button className="btn btn-secondary sort-direction" onClick={() => setSortDirection(current => current === "asc" ? "desc" : "asc")}>{sortDirection === "asc" ? "Ascending" : "Descending"}</button>
             </div>
           </div>
 
-          <p className="results-summary">
-            Showing {filteredTasks.length} of {tasks.length} tasks
-          </p>
+          <p className="results-summary">Showing {filteredTasks.length} of {tasks.length} tasks</p>
 
           <div className="task-table-wrap">
             <table className="task-table">
-              <thead>
-                <tr>
-                  <th>Title</th>
-                  <th>Status</th>
-                  <th>Project / Category</th>
-                  <th>Task source</th>
-                  <th>Priority</th>
-                  <th>Created date</th>
-                  <th>Due date</th>
-                  <th>Last updated</th>
-                  <th>Final result / summary</th>
-                </tr>
-              </thead>
-
+              <thead><tr><th>Title</th><th>Status</th><th>Project / Category</th><th>Task source</th><th>Priority</th><th>Created date</th><th>Due date</th><th>Last updated</th><th>Final result / summary</th></tr></thead>
               <tbody>
                 {filteredTasks.map(task => (
-                  <tr
-                    key={task.id}
-                    tabIndex="0"
-                    onClick={() => onOpen(task)}
-                    onKeyDown={event =>
-                      openFromKeyboard(event, task)
-                    }
-                  >
+                  <tr key={task.id} tabIndex="0" onClick={() => onOpen(task)} onKeyDown={event => openFromKeyboard(event, task)}>
                     <td className="table-title">{task.title}</td>
                     <td>{statusTitle(task.status)}</td>
                     <td>{task.project || "—"}</td>
                     <td>{task.source || "—"}</td>
-                    <td>
-                      <span
-                        className={`pill priority-${task.priority.toLowerCase()}`}
-                      >
-                        {task.priority}
-                      </span>
-                    </td>
+                    <td><span className={`pill priority-${task.priority.toLowerCase()}`}>{task.priority}</span></td>
                     <td>{formatDate(createdDate(task))}</td>
                     <td>{formatDate(task.deadline)}</td>
                     <td>{formatDate(task.updatedAt, true)}</td>
-                    <td>
-                      <span className="table-summary">
-                        {task.finalResult || "—"}
-                      </span>
-                    </td>
+                    <td><span className="table-summary">{task.finalResult || "—"}</span></td>
                   </tr>
                 ))}
               </tbody>
@@ -1744,51 +1127,17 @@
 
           <div className="mobile-task-list">
             {filteredTasks.map(task => (
-              <article
-                key={task.id}
-                className="mobile-task-card"
-                tabIndex="0"
-                onClick={() => onOpen(task)}
-                onKeyDown={event =>
-                  openFromKeyboard(event, task)
-                }
-              >
+              <article key={task.id} className="mobile-task-card" tabIndex="0" onClick={() => onOpen(task)} onKeyDown={event => openFromKeyboard(event, task)}>
                 <h3>{task.title}</h3>
-
                 <div className="mobile-task-meta">
-                  <span className="pill">
-                    {statusTitle(task.status)}
-                  </span>
-                  <span
-                    className={`pill priority-${task.priority.toLowerCase()}`}
-                  >
-                    {task.priority}
-                  </span>
-                  {task.project && (
-                    <span className="pill">{task.project}</span>
-                  )}
+                  <span className="pill">{statusTitle(task.status)}</span>
+                  <span className={`pill priority-${task.priority.toLowerCase()}`}>{task.priority}</span>
+                  {task.project && <span className="pill">{task.project}</span>}
                 </div>
-
-                {task.source && (
-                  <p><strong>From:</strong> {task.source}</p>
-                )}
-
-                <p>
-                  <strong>Created:</strong>{" "}
-                  {formatDate(createdDate(task))} ·{" "}
-                  <strong>Due:</strong> {formatDate(task.deadline)}
-                </p>
-
-                <p>
-                  <strong>Updated:</strong>{" "}
-                  {formatDate(task.updatedAt, true)}
-                </p>
-
-                {task.finalResult && (
-                  <p>
-                    <strong>Result:</strong> {task.finalResult}
-                  </p>
-                )}
+                {task.source && <p><strong>From:</strong> {task.source}</p>}
+                <p><strong>Created:</strong> {formatDate(createdDate(task))} · <strong>Due:</strong> {formatDate(task.deadline)}</p>
+                <p><strong>Updated:</strong> {formatDate(task.updatedAt, true)}</p>
+                {task.finalResult && <p><strong>Result:</strong> {task.finalResult}</p>}
               </article>
             ))}
           </div>
@@ -1801,9 +1150,7 @@
       const [editing, setEditing] = useState(null);
       const [isNew, setIsNew] = useState(false);
       const [dragOver, setDragOver] = useState(null);
-      const [services, setServices] = useState(
-        window.firebaseServices || null
-      );
+      const [services, setServices] = useState(window.firebaseServices || null);
       const [user, setUser] = useState(null);
       const [authReady, setAuthReady] = useState(false);
       const [remoteReady, setRemoteReady] = useState(false);
@@ -1821,24 +1168,18 @@
           setServices(window.firebaseServices);
           return;
         }
-
-        const ready = () =>
-          setServices(window.firebaseServices);
-
+        const ready = () => setServices(window.firebaseServices);
         window.addEventListener("firebase-ready", ready);
-        return () =>
-          window.removeEventListener("firebase-ready", ready);
+        return () => window.removeEventListener("firebase-ready", ready);
       }, []);
 
       useEffect(() => {
         if (!services) return;
-
         if (!services.configured) {
           setAuthReady(true);
           setSyncStatus("Not signed in");
           return;
         }
-
         return services.onAuthStateChanged(
           services.auth,
           nextUser => {
@@ -1850,16 +1191,13 @@
             console.error("Authentication listener failed", error);
             setAuthReady(true);
             setSyncStatus("Sync failed");
-            setMessage(
-              "Could not check your sign-in. Please refresh and try again."
-            );
+            setMessage("Could not check your sign-in. Please refresh and try again.");
           }
         );
       }, [services]);
 
       useEffect(() => {
         setRemoteReady(false);
-
         if (!services?.configured || !user) {
           setTasks([]);
           setSyncStatus("Not signed in");
@@ -1868,96 +1206,50 @@
 
         const cached = loadCache(user.uid);
         if (cached.length) setTasks(cached);
-
         setSyncStatus("Syncing");
-
-        const tasksCollection = services.collection(
-          services.db,
-          "users",
-          user.uid,
-          "tasks"
-        );
-
+        const tasksCollection = services.collection(services.db, "users", user.uid, "tasks");
         const unsubscribe = services.onSnapshot(
           tasksCollection,
           { includeMetadataChanges: true },
           snapshot => {
             const nextTasks = snapshot.docs
-              .map(item =>
-                normalizeTask({ ...item.data(), id: item.id })
-              )
+              .map(item => normalizeTask({ ...item.data(), id: item.id }))
               .sort((a, b) => {
-                const columnDifference =
-                  COLUMNS.findIndex(
-                    column => column.id === a.status
-                  ) -
-                  COLUMNS.findIndex(
-                    column => column.id === b.status
-                  );
-
-                return (
-                  columnDifference ||
-                  a.order - b.order ||
-                  a.title.localeCompare(b.title)
-                );
+                const columnDifference = COLUMNS.findIndex(column => column.id === a.status) - COLUMNS.findIndex(column => column.id === b.status);
+                return columnDifference || a.order - b.order || a.title.localeCompare(b.title);
               });
-
             setTasks(nextTasks);
             saveCache(user.uid, nextTasks);
             setRemoteReady(true);
-            setSyncStatus(
-              snapshot.metadata.hasPendingWrites
-                ? "Syncing"
-                : "Synced"
-            );
+            setSyncStatus(snapshot.metadata.hasPendingWrites ? "Syncing" : "Synced");
           },
           error => {
             console.error("Task sync failed", error);
             setRemoteReady(true);
             setSyncStatus("Sync failed");
-            setMessage(
-              "Tasks could not sync. Check your connection and Firebase setup."
-            );
+            setMessage("Tasks could not sync. Check your connection and Firebase setup.");
           }
         );
-
         return unsubscribe;
       }, [services, user]);
 
-      const tasksCollection = () =>
-        services.collection(
-          services.db,
-          "users",
-          user.uid,
-          "tasks"
-        );
+      const tasksCollection = () => services.collection(services.db, "users", user.uid, "tasks");
 
-      const writeTask = async (
-        task,
-        isNewRecord = false
-      ) => {
+      const writeTask = async (task, isNewRecord = false) => {
         if (!services?.configured || !user) return false;
-
         setSyncStatus("Syncing");
         setMessage("");
-
         try {
           await services.setDoc(
             services.doc(tasksCollection(), task.id),
-            taskForFirestore(
-              task,
-              services.serverTimestamp(),
-              isNewRecord
-            ),
+            taskForFirestore(task, services.serverTimestamp(), isNewRecord),
             { merge: true }
           );
           return true;
         } catch (error) {
           console.error("Could not save task", error);
           setSyncStatus("Sync failed");
-          setMessage(
-            "This task could not be saved. Check your connection and try again."
-          );
+          setMessage("This task could not be saved. Check your connection and try again.");
           return false;
         }
       };
@@ -1965,227 +1257,108 @@
       const signIn = async () => {
         if (!services?.configured) return;
         setMessage("");
-
         try {
-          const provider =
-            new services.GoogleAuthProvider();
-          provider.setCustomParameters({
-            prompt: "select_account"
-          });
-          await services.signInWithPopup(
-            services.auth,
-            provider
-          );
+          const provider = new services.GoogleAuthProvider();
+          provider.setCustomParameters({ prompt: "select_account" });
+          await services.signInWithPopup(services.auth, provider);
         } catch (error) {
           console.error("Google sign-in failed", error);
-          setMessage(
-            error.code === "auth/popup-blocked"
-              ? "The sign-in window was blocked. Allow pop-ups for this page and try again."
-              : "Google sign-in failed. Check the Firebase authorized domains and try again."
-          );
+          setMessage(error.code === "auth/popup-blocked"
+            ? "The sign-in window was blocked. Allow pop-ups for this page and try again."
+            : "Google sign-in failed. Check the Firebase authorized domains and try again.");
         }
       };
 
       const logOut = async () => {
         setSyncStatus("Syncing");
-
         try {
           await services.signOut(services.auth);
         } catch (error) {
           console.error("Sign out failed", error);
           setSyncStatus("Sync failed");
-          setMessage(
-            "Could not sign out. Please try again."
-          );
+          setMessage("Could not sign out. Please try again.");
         }
       };
 
-      const openNew = (status, smart = false) => {
-        setEditing(blankTask(status));
-        setIsNew(true);
-        setQuickEntryStart(smart);
-      };
-
-      const openExisting = task => {
-        setEditing({ ...task });
-        setIsNew(false);
-        setQuickEntryStart(false);
-      };
-
+      const openNew = (status, smart = false) => { setEditing(blankTask(status)); setIsNew(true); setQuickEntryStart(smart); };
+      const openExisting = task => { setEditing({ ...task }); setIsNew(false); setQuickEntryStart(false); };
       const saveTask = async task => {
-        const previous = tasks.find(
-          item => item.id === task.id
-        );
-
-        if (
-          isNew ||
-          (previous && previous.status !== task.status)
-        ) {
-          const columnOrders = tasks
-            .filter(item => item.status === task.status)
-            .map(item => item.order || 0);
-
-          task.order =
-            (columnOrders.length
-              ? Math.max(...columnOrders)
-              : 0) + 1;
+        const previous = tasks.find(item => item.id === task.id);
+        if (isNew || (previous && previous.status !== task.status)) {
+          const columnOrders = tasks.filter(item => item.status === task.status).map(item => item.order || 0);
+          task.order = (columnOrders.length ? Math.max(...columnOrders) : 0) + 1;
         }
-
-        if (await writeTask(task, isNew)) {
-          setEditing(null);
-        }
+        if (await writeTask(task, isNew)) setEditing(null);
       };
-
       const deleteTask = async id => {
-        if (!window.confirm(
-          "Delete this task? This cannot be undone."
-        )) return;
-
+        if (!window.confirm("Delete this task? This cannot be undone.")) return;
         setSyncStatus("Syncing");
         setMessage("");
-
         try {
-          await services.deleteDoc(
-            services.doc(tasksCollection(), id)
-          );
+          await services.deleteDoc(services.doc(tasksCollection(), id));
           setEditing(null);
         } catch (error) {
           console.error("Could not delete task", error);
           setSyncStatus("Sync failed");
-          setMessage(
-            "This task could not be deleted. Check your connection and try again."
-          );
+          setMessage("This task could not be deleted. Check your connection and try again.");
         }
       };
-
       const startDrag = (event, id) => {
         draggedId.current = id;
         event.currentTarget.classList.add("dragging");
         event.dataTransfer.effectAllowed = "move";
       };
-
       const endDrag = event => {
         event.currentTarget.classList.remove("dragging");
         draggedId.current = null;
         setDragOver(null);
       };
-
       const drop = async (event, status) => {
         event.preventDefault();
-
-        const task = tasks.find(
-          item => item.id === draggedId.current
-        );
-
+        const task = tasks.find(item => item.id === draggedId.current);
         if (task && task.status !== status) {
-          const columnOrders = tasks
-            .filter(item => item.status === status)
-            .map(item => item.order || 0);
-
-          const movedTask = {
-            ...task,
-            status,
-            order:
-              (columnOrders.length
-                ? Math.max(...columnOrders)
-                : 0) + 1
-          };
-
-          setTasks(current =>
-            current.map(item =>
-              item.id === movedTask.id
-                ? movedTask
-                : item
-            )
-          );
-
+          const columnOrders = tasks.filter(item => item.status === status).map(item => item.order || 0);
+          const movedTask = { ...task, status, order: (columnOrders.length ? Math.max(...columnOrders) : 0) + 1 };
+          setTasks(current => current.map(item => item.id === movedTask.id ? movedTask : item));
           await writeTask(movedTask);
         }
-
         setDragOver(null);
       };
 
       const importLocalTasks = async () => {
         if (!localTasks.length || !user) return;
-
         setSyncStatus("Syncing");
         setMessage("");
-
         try {
-          for (
-            let start = 0;
-            start < localTasks.length;
-            start += 400
-          ) {
-            const batch =
-              services.writeBatch(services.db);
-
-            localTasks
-              .slice(start, start + 400)
-              .forEach((task, index) => {
-                const prepared = {
-                  ...normalizeTask(task),
-                  order:
-                    task.order ||
-                    start + index + 1
-                };
-
-                batch.set(
-                  services.doc(
-                    tasksCollection(),
-                    prepared.id
-                  ),
-                  taskForFirestore(
-                    prepared,
-                    services.serverTimestamp(),
-                    true
-                  ),
-                  { merge: true }
-                );
-              });
-
+          for (let start = 0; start < localTasks.length; start += 400) {
+            const batch = services.writeBatch(services.db);
+            localTasks.slice(start, start + 400).forEach((task, index) => {
+              const prepared = { ...normalizeTask(task), order: task.order || start + index + 1 };
+              batch.set(
+                services.doc(tasksCollection(), prepared.id),
+                taskForFirestore(prepared, services.serverTimestamp(), true),
+                { merge: true }
+              );
+            });
             await batch.commit();
           }
-
           localStorage.removeItem(STORAGE_KEY);
           localStorage.removeItem(LEGACY_KEY);
           setLocalTasks([]);
         } catch (error) {
-          console.error(
-            "Local task import failed",
-            error
-          );
+          console.error("Local task import failed", error);
           setSyncStatus("Sync failed");
-          setMessage(
-            "Local tasks could not be imported. Nothing was removed; please try again."
-          );
+          setMessage("Local tasks could not be imported. Nothing was removed; please try again.");
         }
       };
 
-      const activeCount = tasks.filter(
-        task =>
-          !["done", "archived"].includes(task.status)
-      ).length;
+      const activeCount = tasks.filter(task => !["done", "archived"].includes(task.status)).length;
+      const doneCount = tasks.filter(task => task.status === "done").length;
 
-      const doneCount = tasks.filter(
-        task => task.status === "done"
-      ).length;
-
-      const statusClass =
-        syncStatus === "Synced"
-          ? "synced"
-          : syncStatus === "Syncing"
-            ? "syncing"
-            : syncStatus === "Sync failed"
-              ? "failed"
-              : "";
+      const statusClass = syncStatus === "Synced" ? "synced" : syncStatus === "Syncing" ? "syncing" : syncStatus === "Sync failed" ? "failed" : "";
 
       if (!services || !authReady) {
-        return (
-          <div className="loading-board">
-            Starting Daily Work Tracker…
-          </div>
-        );
+        return <div className="loading-board">Starting Daily Work Tracker…</div>;
       }
 
       return (
@@ -2193,77 +1366,21 @@
           <header>
             <div className="brand">
               <h1>Daily Work Tracker</h1>
-              <p>
-                Keep the background, progress, feedback,
-                and result of your work in one place.
-              </p>
+              <p>Keep the background, progress, feedback, and result of your work in one place.</p>
             </div>
-
             <div className="header-actions">
-              {user && (
-                <div className="stats">
-                  <span>
-                    <strong>{activeCount}</strong> active
-                  </span>
-                  <span>
-                    <strong>{doneCount}</strong> done
-                  </span>
-                </div>
-              )}
-
-              <span className={`sync-status ${statusClass}`}>
-                {syncStatus}
-              </span>
-
+              {user && <div className="stats"><span><strong>{activeCount}</strong> active</span><span><strong>{doneCount}</strong> done</span></div>}
+              <span className={`sync-status ${statusClass}`}>{syncStatus}</span>
               {user ? (
                 <div className="account-area">
-                  <span
-                    className="account-email"
-                    title={user.email}
-                  >
-                    {user.email}
-                  </span>
-
-                  <button
-                    className="btn btn-secondary"
-                    onClick={logOut}
-                  >
-                    Sign out
-                  </button>
-
-                  <button
-                    className="btn btn-secondary"
-                    onClick={() =>
-                      setShowAISettings(true)
-                    }
-                  >
-                    AI Settings
-                  </button>
-
-                  <button
-                    className="btn btn-secondary"
-                    onClick={() =>
-                      openNew("new", true)
-                    }
-                  >
-                    Smart Quick Entry
-                  </button>
-
-                  <button
-                    className="btn btn-primary"
-                    onClick={() => openNew("new")}
-                  >
-                    + New task
-                  </button>
+                  <span className="account-email" title={user.email}>{user.email}</span>
+                  <button className="btn btn-secondary" onClick={logOut}>Sign out</button>
+                  <button className="btn btn-secondary" onClick={() => setShowAISettings(true)}>AI Settings</button>
+                  <button className="btn btn-secondary" onClick={() => openNew("new", true)}>Smart Quick Entry</button>
+                  <button className="btn btn-primary" onClick={() => openNew("new")}>+ New task</button>
                 </div>
               ) : (
-                <button
-                  className="btn btn-primary"
-                  onClick={signIn}
-                  disabled={!services.configured}
-                >
-                  Sign in with Google
-                </button>
+                <button className="btn btn-primary" onClick={signIn} disabled={!services.configured}>Sign in with Google</button>
               )}
             </div>
           </header>
@@ -2271,162 +1388,48 @@
           {!user ? (
             <main className="welcome-wrap">
               <div className="welcome-card">
-                <h2>
-                  Your work, available on every device
-                </h2>
-
-                <p>
-                  Sign in with the same Google account on
-                  your computer and phone. Your tasks will
-                  stay private to your account and sync
-                  automatically.
-                </p>
-
-                <button
-                  className="btn btn-primary"
-                  onClick={signIn}
-                  disabled={!services.configured}
-                >
-                  Sign in with Google
-                </button>
-
-                {!services.configured && (
-                  <div className="setup-note">
-                    Firebase is not configured yet. Replace
-                    the placeholder values in{" "}
-                    <strong>firebaseConfig</strong>, then
-                    publish the page again.
-                  </div>
-                )}
-
-                {message && (
-                  <div className="error-note">
-                    {message}
-                  </div>
-                )}
+                <h2>Your work, available on every device</h2>
+                <p>Sign in with the same Google account on your computer and phone. Your tasks will stay private to your account and sync automatically.</p>
+                <button className="btn btn-primary" onClick={signIn} disabled={!services.configured}>Sign in with Google</button>
+                {!services.configured && <div className="setup-note">Firebase is not configured yet. Replace the placeholder values in <strong>firebaseConfig</strong>, then publish the page again.</div>}
+                {message && <div className="error-note">{message}</div>}
               </div>
             </main>
           ) : (
             <>
               {localTasks.length > 0 && (
                 <div className="import-banner">
-                  <span>
-                    {localTasks.length} task
-                    {localTasks.length === 1 ? "" : "s"} from
-                    the old local-only app were found on this
-                    device.
-                  </span>
-
-                  <button
-                    className="btn btn-secondary"
-                    onClick={importLocalTasks}
-                  >
-                    Import into my account
-                  </button>
+                  <span>{localTasks.length} task{localTasks.length === 1 ? "" : "s"} from the old local-only app were found on this device.</span>
+                  <button className="btn btn-secondary" onClick={importLocalTasks}>Import into my account</button>
                 </div>
               )}
-
-              {message && (
-                <div className="import-banner error-note">
-                  {message}
-                </div>
-              )}
-
-              {!remoteReady && !tasks.length ? (
-                <div className="loading-board">
-                  Syncing your tasks…
-                </div>
-              ) : (
+              {message && <div className="import-banner error-note">{message}</div>}
+              {!remoteReady && !tasks.length ? <div className="loading-board">Syncing your tasks…</div> : (
                 <>
                   <div className="view-toolbar">
-                    <div
-                      className="view-switcher"
-                      aria-label="Choose task view"
-                    >
-                      <button
-                        className={`view-button${view === "kanban" ? " active" : ""}`}
-                        onClick={() => setView("kanban")}
-                      >
-                        Kanban View
-                      </button>
-
-                      <button
-                        className={`view-button${view === "table" ? " active" : ""}`}
-                        onClick={() => setView("table")}
-                      >
-                        Table View
-                      </button>
+                    <div className="view-switcher" aria-label="Choose task view">
+                      <button className={`view-button${view === "kanban" ? " active" : ""}`} onClick={() => setView("kanban")}>Kanban View</button>
+                      <button className={`view-button${view === "table" ? " active" : ""}`} onClick={() => setView("table")}>Table View</button>
                     </div>
                   </div>
-
                   {view === "kanban" ? (
                     <main className="board">
                       {COLUMNS.map(column => (
-                        <Column
-                          key={column.id}
-                          column={column}
-                          tasks={tasks.filter(
-                            task =>
-                              task.status === column.id
-                          )}
-                          onAdd={openNew}
-                          onOpen={openExisting}
-                          onDelete={deleteTask}
-                          onDragStart={startDrag}
-                          onDragEnd={endDrag}
-                          onDragOver={(event, status) => {
-                            event.preventDefault();
-                            setDragOver(status);
-                          }}
-                          onDrop={drop}
-                          isOver={
-                            dragOver === column.id
-                          }
-                        />
+                        <Column key={column.id} column={column} tasks={tasks.filter(task => task.status === column.id)} onAdd={openNew} onOpen={openExisting} onDelete={deleteTask} onDragStart={startDrag} onDragEnd={endDrag} onDragOver={(event, status) => { event.preventDefault(); setDragOver(status); }} onDrop={drop} isOver={dragOver === column.id} />
                       ))}
                     </main>
-                  ) : (
-                    <TableView
-                      tasks={tasks}
-                      onOpen={openExisting}
-                    />
-                  )}
+                  ) : <TableView tasks={tasks} onOpen={openExisting} />}
                 </>
               )}
             </>
           )}
-
-          {editing && (
-            <TaskModal
-              task={editing}
-              isNew={isNew}
-              onSave={saveTask}
-              onDelete={deleteTask}
-              onClose={() => setEditing(null)}
-              aiSettings={aiSettings}
-              onOpenAISettings={() =>
-                setShowAISettings(true)
-              }
-              quickEntryStart={quickEntryStart}
-            />
-          )}
-
-          {showAISettings && (
-            <AISettingsModal
-              settings={aiSettings}
-              onSave={setAISettings}
-              onClose={() =>
-                setShowAISettings(false)
-              }
-            />
-          )}
+          {editing && <TaskModal task={editing} isNew={isNew} onSave={saveTask} onDelete={deleteTask} onClose={() => setEditing(null)} aiSettings={aiSettings} onOpenAISettings={() => setShowAISettings(true)} quickEntryStart={quickEntryStart} />}
+          {showAISettings && <AISettingsModal settings={aiSettings} onSave={setAISettings} onClose={() => setShowAISettings(false)} />}
         </>
       );
     }
 
-    ReactDOM
-      .createRoot(document.getElementById("root"))
-      .render(<App />);
+    ReactDOM.createRoot(document.getElementById("root")).render(<App />);
   </script>
 </body>
 </html>
