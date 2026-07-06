@@ -3,77 +3,561 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>React Kanban</title>
+  <title>Daily Work Tracker</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
   <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    *, *::before, *::after { box-sizing: border-box; }
     :root {
-      --bg:#0f1117;--surface:#1a1f2e;--card:#242938;--border:#2e3448;
-      --accent:#7c3aed;--accent2:#06b6d4;--success:#22c55e;--danger:#ef4444;
-      --warning:#f59e0b;--text:#e2e8f0;--muted:#64748b;--radius:10px;
+      --bg: #f5f6f8;
+      --surface: #ffffff;
+      --surface-soft: #f8fafc;
+      --border: #dfe3e8;
+      --text: #1f2937;
+      --muted: #667085;
+      --primary: #4f46e5;
+      --primary-dark: #4338ca;
+      --danger: #c62828;
+      --shadow: 0 12px 36px rgba(15, 23, 42, .14);
+      --radius: 10px;
     }
-    body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,sans-serif;min-height:100vh;}
-    header{background:var(--surface);border-bottom:1px solid var(--border);padding:1rem 2rem;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;}
-    header h1{font-size:1.25rem;font-weight:700;background:linear-gradient(135deg,var(--accent),var(--accent2));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;}
-    .board{display:flex;gap:1.25rem;padding:1.5rem 2rem 2rem;overflow-x:auto;min-height:calc(100vh - 65px);align-items:flex-start;}
-    .column{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);width:300px;min-width:300px;display:flex;flex-direction:column;max-height:calc(100vh - 100px);}
-    .column.drag-over{border-color:var(--accent);background:#1e1735;}
-    .col-header{display:flex;align-items:center;justify-content:space-between;padding:.85rem 1rem;border-bottom:1px solid var(--border);}
-    .col-title{display:flex;align-items:center;gap:.5rem;font-size:.85rem;font-weight:700;letter-spacing:.5px;text-transform:uppercase;}
-    .col-dot{width:8px;height:8px;border-radius:50%;}
-    .col-count{font-size:.72rem;font-weight:600;padding:.15rem .45rem;border-radius:99px;background:var(--card);color:var(--muted);}
-    .cards-list{flex:1;overflow-y:auto;padding:.75rem;display:flex;flex-direction:column;gap:.6rem;min-height:60px;}
-    .card{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:.75rem;cursor:grab;user-select:none;transition:transform .15s,box-shadow .15s,border-color .15s;position:relative;}
-    .card:hover{border-color:var(--accent);transform:translateY(-1px);box-shadow:0 4px 16px rgba(0,0,0,.4);}
-    .card.dragging{opacity:.4;cursor:grabbing;}
-    .card-title{font-size:.875rem;font-weight:500;line-height:1.4;margin-bottom:.4rem;word-break:break-word;}
-    .card-meta{display:flex;align-items:center;justify-content:space-between;margin-top:.5rem;}
-    .card-tag{font-size:.65rem;font-weight:600;padding:.15rem .45rem;border-radius:99px;letter-spacing:.3px;}
-    .card-delete{background:none;border:none;color:var(--muted);cursor:pointer;font-size:.8rem;padding:.15rem .3rem;border-radius:4px;opacity:0;transition:opacity .15s,color .15s;}
-    .card:hover .card-delete{opacity:1;}
-    .card-delete:hover{color:var(--danger);}
-    .add-card-area{padding:.75rem;border-top:1px solid var(--border);}
-    .add-card-input{width:100%;background:var(--card);border:1px solid var(--border);border-radius:6px;padding:.55rem .75rem;color:var(--text);font-size:.82rem;resize:none;outline:none;transition:border-color .2s;font-family:inherit;min-height:60px;}
-    .add-card-input:focus{border-color:var(--accent);}
-    .add-card-actions{display:flex;gap:.5rem;margin-top:.5rem;}
-    .btn{padding:.4rem .9rem;border-radius:6px;font-size:.78rem;font-weight:600;cursor:pointer;border:none;transition:all .15s;}
-    .btn-primary{background:var(--accent);color:#fff;}
-    .btn-primary:hover{background:#6d28d9;}
-    .btn-ghost{background:transparent;color:var(--muted);border:1px solid var(--border);}
-    .btn-ghost:hover{color:var(--text);border-color:var(--muted);}
-    .btn-add-card{width:100%;background:none;border:1px dashed var(--border);color:var(--muted);border-radius:6px;padding:.45rem;font-size:.78rem;cursor:pointer;transition:all .15s;}
-    .btn-add-card:hover{border-color:var(--accent);color:var(--text);}
-    .tag-row{display:flex;gap:.4rem;flex-wrap:wrap;margin-top:.4rem;}
-    .tag-chip{font-size:.65rem;font-weight:600;padding:.15rem .45rem;border-radius:99px;cursor:pointer;border:2px solid transparent;opacity:.6;transition:opacity .15s,border-color .15s;}
-    .tag-chip.selected{opacity:1;border-color:rgba(255,255,255,.4);}
-    .stats-bar{display:flex;gap:1.5rem;font-size:.75rem;color:var(--muted);}
-    .stat-val{font-weight:700;color:var(--text);}
-    .empty{text-align:center;color:var(--muted);font-size:.78rem;padding:1rem 0;}
-    ::-webkit-scrollbar{width:4px;height:4px;}
-    ::-webkit-scrollbar-track{background:transparent;}
-    ::-webkit-scrollbar-thumb{background:var(--border);border-radius:99px;}
-    @media(max-width:640px){.board{padding:1rem;gap:1rem;}.column{width:270px;min-width:270px;}}
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: Inter, "Segoe UI", system-ui, -apple-system, sans-serif;
+      min-height: 100vh;
+    }
+    button, input, select, textarea { font: inherit; }
+    button { cursor: pointer; }
+    header {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      padding: 1rem 1.5rem;
+      background: rgba(255, 255, 255, .96);
+      border-bottom: 1px solid var(--border);
+    }
+    .brand h1 { margin: 0; font-size: 1.25rem; }
+    .brand p { margin: .2rem 0 0; color: var(--muted); font-size: .8rem; }
+    .header-actions { display: flex; align-items: center; gap: 1rem; }
+    .stats { display: flex; gap: 1rem; color: var(--muted); font-size: .78rem; }
+    .stats strong { color: var(--text); }
+    .btn {
+      border: 1px solid transparent;
+      border-radius: 8px;
+      padding: .55rem .9rem;
+      font-weight: 650;
+      font-size: .82rem;
+    }
+    .btn-primary { background: var(--primary); color: #fff; }
+    .btn-primary:hover { background: var(--primary-dark); }
+    .btn-secondary { background: #fff; border-color: var(--border); color: var(--text); }
+    .btn-secondary:hover { background: var(--surface-soft); }
+    .btn-danger { background: #fff; border-color: #efb4b4; color: var(--danger); }
+    .board {
+      display: flex;
+      align-items: flex-start;
+      gap: 1rem;
+      min-height: calc(100vh - 74px);
+      overflow-x: auto;
+      padding: 1.25rem 1.5rem 2rem;
+    }
+    .column {
+      display: flex;
+      flex-direction: column;
+      width: 285px;
+      min-width: 285px;
+      max-height: calc(100vh - 110px);
+      background: #eef1f5;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      transition: border-color .15s, background .15s;
+    }
+    .column.drag-over { border-color: var(--primary); background: #e8e7ff; }
+    .column-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: .8rem .85rem;
+      border-bottom: 1px solid var(--border);
+    }
+    .column-title { display: flex; align-items: center; gap: .5rem; font-size: .8rem; font-weight: 750; }
+    .column-dot { width: 9px; height: 9px; border-radius: 50%; }
+    .column-count { color: var(--muted); font-size: .72rem; background: #fff; padding: .15rem .45rem; border-radius: 20px; }
+    .card-list { display: flex; flex-direction: column; gap: .65rem; min-height: 70px; overflow-y: auto; padding: .7rem; }
+    .empty { padding: 1rem .5rem; text-align: center; color: var(--muted); font-size: .78rem; }
+    .task-card {
+      position: relative;
+      padding: .8rem;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      box-shadow: 0 1px 2px rgba(15, 23, 42, .04);
+      cursor: pointer;
+      transition: transform .15s, border-color .15s, box-shadow .15s;
+    }
+    .task-card:hover { transform: translateY(-1px); border-color: #aaa6f5; box-shadow: 0 5px 16px rgba(15, 23, 42, .08); }
+    .task-card.dragging { opacity: .45; }
+    .card-title { margin: 0 1.5rem .55rem 0; font-size: .88rem; line-height: 1.4; }
+    .card-delete { position: absolute; top: .55rem; right: .55rem; border: 0; background: transparent; color: #98a2b3; font-size: .85rem; }
+    .card-delete:hover { color: var(--danger); }
+    .card-meta { display: flex; flex-wrap: wrap; gap: .35rem; margin-bottom: .5rem; }
+    .pill { border-radius: 20px; padding: .17rem .45rem; background: #eef2ff; color: #4338ca; font-size: .66rem; font-weight: 650; }
+    .priority-high { background: #fee2e2; color: #b91c1c; }
+    .priority-medium { background: #fef3c7; color: #92400e; }
+    .priority-low { background: #dcfce7; color: #166534; }
+    .card-line { margin: .3rem 0 0; color: var(--muted); font-size: .72rem; line-height: 1.35; }
+    .card-line strong { color: #475467; }
+    .add-task { margin: 0 .7rem .7rem; border: 1px dashed #b8c0cc; border-radius: 7px; padding: .5rem; background: transparent; color: #596579; font-size: .78rem; }
+    .add-task:hover { background: #fff; border-color: var(--primary); color: var(--primary); }
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      z-index: 100;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 1rem;
+      background: rgba(15, 23, 42, .55);
+    }
+    .modal {
+      width: min(820px, 100%);
+      max-height: calc(100vh - 2rem);
+      overflow-y: auto;
+      background: var(--surface);
+      border-radius: 14px;
+      box-shadow: var(--shadow);
+    }
+    .modal-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; padding: 1.2rem 1.35rem; border-bottom: 1px solid var(--border); }
+    .modal-header h2 { margin: 0; font-size: 1.1rem; }
+    .modal-header p { margin: .25rem 0 0; color: var(--muted); font-size: .78rem; }
+    .close-button { border: 0; background: transparent; color: var(--muted); font-size: 1.3rem; line-height: 1; }
+    .form-body { padding: 1.2rem 1.35rem; }
+    .form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .9rem 1rem; }
+    .field { display: flex; flex-direction: column; gap: .35rem; }
+    .field.full { grid-column: 1 / -1; }
+    label { color: #344054; font-size: .76rem; font-weight: 700; }
+    input, select, textarea { width: 100%; border: 1px solid #cfd5dd; border-radius: 7px; padding: .58rem .65rem; background: #fff; color: var(--text); font-size: .83rem; outline: none; }
+    input:focus, select:focus, textarea:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(79, 70, 229, .1); }
+    textarea { min-height: 82px; resize: vertical; line-height: 1.45; }
+    textarea.long { min-height: 115px; }
+    .hint { margin: 0; color: var(--muted); font-size: .7rem; }
+    .modal-actions { display: flex; justify-content: space-between; gap: .75rem; padding: 1rem 1.35rem; border-top: 1px solid var(--border); background: var(--surface-soft); border-radius: 0 0 14px 14px; }
+    .action-group { display: flex; gap: .6rem; }
+    .required { color: var(--danger); }
+    @media (max-width: 700px) {
+      header { align-items: flex-start; padding: .85rem 1rem; }
+      .brand p, .stats { display: none; }
+      .board { padding: 1rem; }
+      .column { width: 270px; min-width: 270px; }
+      .form-grid { grid-template-columns: 1fr; }
+      .field.full { grid-column: auto; }
+      .modal-actions { align-items: stretch; flex-direction: column-reverse; }
+      .action-group { justify-content: flex-end; }
+    }
   </style>
 </head>
 <body>
   <div id="root"></div>
   <script type="text/babel">
-    const{useState,useRef}=React;
-    const TAGS=[{label:"Feature",color:"#7c3aed",bg:"#3b1a7a22"},{label:"Bug",color:"#ef4444",bg:"#7f1d1d22"},{label:"Docs",color:"#06b6d4",bg:"#0c4a6e22"},{label:"Design",color:"#f59e0b",bg:"#78350f22"},{label:"Research",color:"#22c55e",bg:"#14532d22"}];
-    const COL_COLORS={todo:{dot:"#64748b",label:"#94a3b8"},inprogress:{dot:"#f59e0b",label:"#fbbf24"},review:{dot:"#06b6d4",label:"#22d3ee"},done:{dot:"#22c55e",label:"#4ade80"}};
-    const COLS=[{id:"todo",title:"To Do"},{id:"inprogress",title:"In Progress"},{id:"review",title:"In Review"},{id:"done",title:"Done"}];
-    const SAMPLE=[{id:"c1",col:"todo",text:"Set up project structure and configure TypeScript",tag:"Feature"},{id:"c2",col:"todo",text:"Design database schema for user accounts",tag:"Design"},{id:"c3",col:"todo",text:"Write unit tests for auth module",tag:"Docs"},{id:"c4",col:"inprogress",text:"Implement drag-and-drop card movement",tag:"Feature"},{id:"c5",col:"inprogress",text:"Fix layout shift on mobile viewport",tag:"Bug"},{id:"c6",col:"review",text:"Kanban board component peer review",tag:"Feature"},{id:"c7",col:"done",text:"Initial project scaffolding",tag:"Feature"},{id:"c8",col:"done",text:"Dark theme design system",tag:"Design"}];
-    function load(){try{const s=localStorage.getItem("kanban");return s?JSON.parse(s):SAMPLE;}catch{return SAMPLE;}}
-    function save(c){try{localStorage.setItem("kanban",JSON.stringify(c));}catch{}}
-    let _n=Date.now();const uid=()=>`c${++_n}`;
-    function Tag({tag}){const t=TAGS.find(x=>x.label===tag);return t?<span className="card-tag" style={{color:t.color,background:t.bg}}>{tag}</span>:null;}
-    function CardForm({colId,onAdd,onCancel}){const[text,setText]=useState("");const[tag,setTag]=useState("Feature");const go=()=>{if(!text.trim())return;onAdd(colId,text.trim(),tag);setText("");};return(<div><textarea className="add-card-input" placeholder="Card title..." value={text} onChange={e=>setText(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();go();}}} autoFocus/><div className="tag-row">{TAGS.map(t=><span key={t.label} className={`tag-chip${tag===t.label?" selected":""}`} style={{color:t.color,background:t.bg}} onClick={()=>setTag(t.label)}>{t.label}</span>)}</div><div className="add-card-actions"><button className="btn btn-primary" onClick={go}>Add card</button><button className="btn btn-ghost" onClick={onCancel}>Cancel</button></div></div>);}
-    function Card({card,onDel,onDS,onDE}){return(<div className="card" draggable onDragStart={e=>onDS(e,card.id)} onDragEnd={onDE}><div className="card-title">{card.text}</div><div className="card-meta"><Tag tag={card.tag}/><button className="card-delete" onClick={()=>onDel(card.id)}>&#x2715;</button></div></div>);}
-    function Col({col,cards,onAdd,onDel,onDS,onDE,onDO,onDrop,over}){const[adding,setAdding]=useState(false);const c=COL_COLORS[col.id]||{dot:"#64748b",label:"#94a3b8"};return(<div className={`column${over?" drag-over":""}`} onDragOver={e=>onDO(e,col.id)} onDrop={e=>onDrop(e,col.id)}><div className="col-header"><div className="col-title"><span className="col-dot" style={{background:c.dot}}/><span style={{color:c.label}}>{col.title}</span></div><span className="col-count">{cards.length}</span></div><div className="cards-list">{cards.length===0&&<div className="empty">Drop cards here</div>}{cards.map(card=><Card key={card.id} card={card} onDel={onDel} onDS={onDS} onDE={onDE}/>)}</div><div className="add-card-area">{adding?<CardForm colId={col.id} onAdd={(ci,t,tg)=>{onAdd(ci,t,tg);setAdding(false);}} onCancel={()=>setAdding(false)}/>:<button className="btn-add-card" onClick={()=>setAdding(true)}>+ Add card</button>}</div></div>);}
-    function App(){const[cards,setCards]=useState(load);const drag=useRef(null);const[over,setOver]=useState(null);const persist=n=>{setCards(n);save(n);};return(<><header><h1>&#x26A1; React Kanban</h1><div className="stats-bar"><span><span className="stat-val">{cards.length}</span> cards</span><span><span className="stat-val">{cards.filter(c=>c.col==="done").length}</span> done</span><span><span className="stat-val">{cards.length?Math.round(cards.filter(c=>c.col==="done").length/cards.length*100):0}%</span> complete</span></div></header><div className="board">{COLS.map(col=><Col key={col.id} col={col} cards={cards.filter(c=>c.col===col.id)} onAdd={(ci,t,tg)=>persist([...cards,{id:uid(),col:ci,text:t,tag:tg}])} onDel={id=>persist(cards.filter(c=>c.id!==id))} onDS={(e,id)=>{drag.current=id;e.currentTarget.classList.add("dragging");e.dataTransfer.effectAllowed="move";}} onDE={e=>{e.currentTarget.classList.remove("dragging");drag.current=null;setOver(null);}} onDO={(e,ci)=>{e.preventDefault();setOver(ci);}} onDrop={(e,ci)=>{e.preventDefault();if(drag.current)persist(cards.map(c=>c.id===drag.current?{...c,col:ci}:c));setOver(null);}} over={over===col.id}/>)}</div></>);}
-    ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+    const { useEffect, useRef, useState } = React;
+
+    const STORAGE_KEY = "dailyWorkTrackerTasks";
+    const LEGACY_KEY = "kanban";
+    const COLUMNS = [
+      { id: "new", title: "New", color: "#64748b" },
+      { id: "todo", title: "To Do", color: "#8b5cf6" },
+      { id: "inprogress", title: "In Progress", color: "#f59e0b" },
+      { id: "feedback", title: "Waiting for Feedback", color: "#0ea5e9" },
+      { id: "done", title: "Done", color: "#22c55e" },
+      { id: "archived", title: "Archived", color: "#94a3b8" }
+    ];
+    const PRIORITIES = ["Low", "Medium", "High"];
+
+    const today = () => new Date().toISOString().slice(0, 10);
+    const makeId = () => `task-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    const blankTask = status => ({
+      id: makeId(),
+      status: status || "new",
+      title: "",
+      source: "",
+      receivedDate: today(),
+      project: "",
+      background: "",
+      priority: "Medium",
+      deadline: "",
+      nextAction: "",
+      processNotes: "",
+      feedbackRecords: "",
+      finalResult: "",
+      links: ""
+    });
+
+    function normalizeTask(task) {
+      const oldStatus = task.status || task.col || "new";
+      const status = oldStatus === "review" ? "feedback" : oldStatus;
+      return {
+        ...blankTask(status),
+        ...task,
+        id: task.id || makeId(),
+        status,
+        title: task.title || task.text || "Untitled task",
+        project: task.project || task.tag || "",
+        background: task.background || "",
+        source: task.source || "",
+        receivedDate: task.receivedDate || "",
+        priority: PRIORITIES.includes(task.priority) ? task.priority : "Medium",
+        deadline: task.deadline || "",
+        nextAction: task.nextAction || "",
+        processNotes: task.processNotes || "",
+        feedbackRecords: task.feedbackRecords || "",
+        finalResult: task.finalResult || "",
+        links: task.links || ""
+      };
+    }
+
+    function loadTasks() {
+      try {
+        const saved = localStorage.getItem(STORAGE_KEY);
+        if (saved) return JSON.parse(saved).map(normalizeTask);
+        const legacy = localStorage.getItem(LEGACY_KEY);
+        if (legacy) return JSON.parse(legacy).map(normalizeTask);
+      } catch (error) {
+        console.warn("Could not load saved tasks", error);
+      }
+      return [];
+    }
+
+    function TaskModal({ task, isNew, onSave, onDelete, onClose }) {
+      const [form, setForm] = useState(task);
+
+      useEffect(() => {
+        const closeOnEscape = event => event.key === "Escape" && onClose();
+        window.addEventListener("keydown", closeOnEscape);
+        return () => window.removeEventListener("keydown", closeOnEscape);
+      }, [onClose]);
+
+      const change = event => setForm({ ...form, [event.target.name]: event.target.value });
+
+      const submit = event => {
+        event.preventDefault();
+        if (!form.title.trim()) return;
+        onSave({ ...form, title: form.title.trim() });
+      };
+
+      return (
+        <div className="modal-backdrop" onMouseDown={event => event.target === event.currentTarget && onClose()}>
+          <form className="modal" onSubmit={submit}>
+            <div className="modal-header">
+              <div>
+                <h2>{isNew ? "Add a work task" : "Task details"}</h2>
+                <p>Record only what is useful now. You can return and add more detail later.</p>
+              </div>
+              <button type="button" className="close-button" aria-label="Close" onClick={onClose}>×</button>
+            </div>
+
+            <div className="form-body">
+              <div className="form-grid">
+                <div className="field full">
+                  <label htmlFor="title">Task title <span className="required">*</span></label>
+                  <input id="title" name="title" value={form.title} onChange={change} placeholder="What needs to be done?" autoFocus />
+                </div>
+
+                <div className="field">
+                  <label htmlFor="source">Task source / who assigned it</label>
+                  <input id="source" name="source" value={form.source} onChange={change} placeholder="e.g. Manager, client, self" />
+                </div>
+
+                <div className="field">
+                  <label htmlFor="project">Project or category</label>
+                  <input id="project" name="project" value={form.project} onChange={change} placeholder="e.g. Website launch" />
+                </div>
+
+                <div className="field full">
+                  <label htmlFor="background">Task background</label>
+                  <textarea id="background" name="background" value={form.background} onChange={change} placeholder="Why is this task needed? Add the request, context, or expected outcome…" />
+                </div>
+
+                <div className="field">
+                  <label htmlFor="receivedDate">Received date</label>
+                  <input id="receivedDate" type="date" name="receivedDate" value={form.receivedDate} onChange={change} />
+                </div>
+
+                <div className="field">
+                  <label htmlFor="deadline">Deadline</label>
+                  <input id="deadline" type="date" name="deadline" value={form.deadline} onChange={change} />
+                </div>
+
+                <div className="field">
+                  <label htmlFor="priority">Priority</label>
+                  <select id="priority" name="priority" value={form.priority} onChange={change}>
+                    {PRIORITIES.map(priority => <option key={priority}>{priority}</option>)}
+                  </select>
+                </div>
+
+                <div className="field">
+                  <label htmlFor="status">Current progress</label>
+                  <select id="status" name="status" value={form.status} onChange={change}>
+                    {COLUMNS.map(column => <option key={column.id} value={column.id}>{column.title}</option>)}
+                  </select>
+                </div>
+
+                <div className="field full">
+                  <label htmlFor="nextAction">Next action</label>
+                  <textarea id="nextAction" name="nextAction" value={form.nextAction} onChange={change} placeholder="What is the very next step?" />
+                </div>
+
+                <div className="field full">
+                  <label htmlFor="processNotes">Work process notes</label>
+                  <textarea className="long" id="processNotes" name="processNotes" value={form.processNotes} onChange={change} placeholder="Add dated notes about decisions, progress, conversations, or blockers…" />
+                </div>
+
+                <div className="field full">
+                  <label htmlFor="feedbackRecords">Feedback records</label>
+                  <textarea className="long" id="feedbackRecords" name="feedbackRecords" value={form.feedbackRecords} onChange={change} placeholder="Record who gave feedback, when, and what changed…" />
+                </div>
+
+                <div className="field full">
+                  <label htmlFor="finalResult">Final result</label>
+                  <textarea className="long" id="finalResult" name="finalResult" value={form.finalResult} onChange={change} placeholder="What was delivered or achieved? Add the outcome when the task is complete." />
+                </div>
+
+                <div className="field full">
+                  <label htmlFor="links">Links or attachment notes</label>
+                  <textarea id="links" name="links" value={form.links} onChange={change} placeholder="Paste document links, ticket URLs, file paths, or attachment notes here…" />
+                  <p className="hint">This simple version stores text and links, not uploaded files.</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="modal-actions">
+              <div>
+                {!isNew && (
+                  <button type="button" className="btn btn-danger" onClick={() => onDelete(form.id)}>
+                    Delete task
+                  </button>
+                )}
+              </div>
+
+              <div className="action-group">
+                <button type="button" className="btn btn-secondary" onClick={onClose}>Cancel</button>
+                <button type="submit" className="btn btn-primary">Save task</button>
+              </div>
+            </div>
+          </form>
+        </div>
+      );
+    }
+
+    function TaskCard({ task, onOpen, onDelete, onDragStart, onDragEnd }) {
+      return (
+        <article
+          className="task-card"
+          draggable
+          onClick={() => onOpen(task)}
+          onDragStart={event => onDragStart(event, task.id)}
+          onDragEnd={onDragEnd}
+        >
+          <button
+            className="card-delete"
+            aria-label={`Delete ${task.title}`}
+            onClick={event => {
+              event.stopPropagation();
+              onDelete(task.id);
+            }}
+          >
+            ×
+          </button>
+
+          <h3 className="card-title">{task.title}</h3>
+
+          <div className="card-meta">
+            <span className={`pill priority-${task.priority.toLowerCase()}`}>{task.priority}</span>
+            {task.project && <span className="pill">{task.project}</span>}
+          </div>
+
+          {task.source && <p className="card-line"><strong>From:</strong> {task.source}</p>}
+          {task.deadline && <p className="card-line"><strong>Due:</strong> {task.deadline}</p>}
+          {task.nextAction && <p className="card-line"><strong>Next:</strong> {task.nextAction}</p>}
+        </article>
+      );
+    }
+
+    function Column({
+      column,
+      tasks,
+      onAdd,
+      onOpen,
+      onDelete,
+      onDragStart,
+      onDragEnd,
+      onDragOver,
+      onDrop,
+      isOver
+    }) {
+      return (
+        <section
+          className={`column${isOver ? " drag-over" : ""}`}
+          onDragOver={event => onDragOver(event, column.id)}
+          onDrop={event => onDrop(event, column.id)}
+        >
+          <div className="column-header">
+            <div className="column-title">
+              <span className="column-dot" style={{ background: column.color }}></span>
+              {column.title}
+            </div>
+            <span className="column-count">{tasks.length}</span>
+          </div>
+
+          <div className="card-list">
+            {!tasks.length && <div className="empty">No tasks here</div>}
+            {tasks.map(task => (
+              <TaskCard
+                key={task.id}
+                task={task}
+                onOpen={onOpen}
+                onDelete={onDelete}
+                onDragStart={onDragStart}
+                onDragEnd={onDragEnd}
+              />
+            ))}
+          </div>
+
+          <button className="add-task" onClick={() => onAdd(column.id)}>+ Add task</button>
+        </section>
+      );
+    }
+
+    function App() {
+      const [tasks, setTasks] = useState(loadTasks);
+      const [editing, setEditing] = useState(null);
+      const [isNew, setIsNew] = useState(false);
+      const [dragOver, setDragOver] = useState(null);
+      const draggedId = useRef(null);
+
+      useEffect(() => {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks));
+      }, [tasks]);
+
+      const openNew = status => {
+        setEditing(blankTask(status));
+        setIsNew(true);
+      };
+
+      const openExisting = task => {
+        setEditing({ ...task });
+        setIsNew(false);
+      };
+
+      const saveTask = task => {
+        setTasks(current =>
+          isNew
+            ? [...current, task]
+            : current.map(item => item.id === task.id ? task : item)
+        );
+        setEditing(null);
+      };
+
+      const deleteTask = id => {
+        if (!window.confirm("Delete this task? This cannot be undone.")) return;
+        setTasks(current => current.filter(task => task.id !== id));
+        setEditing(null);
+      };
+
+      const startDrag = (event, id) => {
+        draggedId.current = id;
+        event.currentTarget.classList.add("dragging");
+        event.dataTransfer.effectAllowed = "move";
+      };
+
+      const endDrag = event => {
+        event.currentTarget.classList.remove("dragging");
+        draggedId.current = null;
+        setDragOver(null);
+      };
+
+      const drop = (event, status) => {
+        event.preventDefault();
+
+        if (draggedId.current) {
+          setTasks(current =>
+            current.map(task =>
+              task.id === draggedId.current ? { ...task, status } : task
+            )
+          );
+        }
+
+        setDragOver(null);
+      };
+
+      const activeCount = tasks.filter(task =>
+        !["done", "archived"].includes(task.status)
+      ).length;
+
+      const doneCount = tasks.filter(task =>
+        task.status === "done"
+      ).length;
+
+      return (
+        <>
+          <header>
+            <div className="brand">
+              <h1>Daily Work Tracker</h1>
+              <p>Keep the background, progress, feedback, and result of your work in one place.</p>
+            </div>
+
+            <div className="header-actions">
+              <div className="stats">
+                <span><strong>{activeCount}</strong> active</span>
+                <span><strong>{doneCount}</strong> done</span>
+              </div>
+              <button className="btn btn-primary" onClick={() => openNew("new")}>
+                + New task
+              </button>
+            </div>
+          </header>
+
+          <main className="board">
+            {COLUMNS.map(column => (
+              <Column
+                key={column.id}
+                column={column}
+                tasks={tasks.filter(task => task.status === column.id)}
+                onAdd={openNew}
+                onOpen={openExisting}
+                onDelete={deleteTask}
+                onDragStart={startDrag}
+                onDragEnd={endDrag}
+                onDragOver={(event, status) => {
+                  event.preventDefault();
+                  setDragOver(status);
+                }}
+                onDrop={drop}
+                isOver={dragOver === column.id}
+              />
+            ))}
+          </main>
+
+          {editing && (
+            <TaskModal
+              task={editing}
+              isNew={isNew}
+              onSave={saveTask}
+              onDelete={deleteTask}
+              onClose={() => setEditing(null)}
+            />
+          )}
+        </>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById("root")).render(<App />);
   </script>
 </body>
 </html>
