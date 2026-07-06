@@ -10,530 +10,268 @@
   <style>
     *, *::before, *::after { box-sizing: border-box; }
     :root {
-      --bg:#f5f6f8;
-      --surface:#fff;
-      --surface-soft:#f8fafc;
-      --border:#dfe3e8;
-      --text:#1f2937;
-      --muted:#667085;
-      --primary:#4f46e5;
-      --primary-dark:#4338ca;
-      --danger:#c62828;
-      --radius:10px;
+      --bg: #f5f6f8;
+      --surface: #ffffff;
+      --surface-soft: #f8fafc;
+      --border: #dfe3e8;
+      --text: #1f2937;
+      --muted: #667085;
+      --primary: #4f46e5;
+      --primary-dark: #4338ca;
+      --danger: #c62828;
+      --shadow: 0 12px 36px rgba(15, 23, 42, .14);
+      --radius: 10px;
     }
     body {
-      margin:0;
-      min-height:100vh;
-      background:var(--bg);
-      color:var(--text);
-      font-family:Inter,"Segoe UI",system-ui,sans-serif;
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: Inter, "Segoe UI", system-ui, -apple-system, sans-serif;
+      min-height: 100vh;
     }
-    button,input,select,textarea { font:inherit; }
-    button { cursor:pointer; }
+    button, input, select, textarea { font: inherit; }
+    button { cursor: pointer; }
     header {
-      position:sticky;
-      top:0;
-      z-index:20;
-      display:flex;
-      align-items:center;
-      justify-content:space-between;
-      gap:1rem;
-      padding:1rem 1.5rem;
-      background:rgba(255,255,255,.96);
-      border-bottom:1px solid var(--border);
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      padding: 1rem 1.5rem;
+      background: rgba(255, 255, 255, .96);
+      border-bottom: 1px solid var(--border);
     }
-    .brand h1 { margin:0; font-size:1.25rem; }
-    .brand p { margin:.2rem 0 0; color:var(--muted); font-size:.8rem; }
-    .header-actions,.account-area,.stats,.action-group {
-      display:flex;
-      align-items:center;
-      gap:.65rem;
-    }
-    .stats { gap:1rem; color:var(--muted); font-size:.78rem; }
-    .stats strong { color:var(--text); }
+    .brand h1 { margin: 0; font-size: 1.25rem; }
+    .brand p { margin: .2rem 0 0; color: var(--muted); font-size: .8rem; }
+    .header-actions { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 1rem; }
+    .stats { display: flex; gap: 1rem; color: var(--muted); font-size: .78rem; }
+    .stats strong { color: var(--text); }
     .btn {
-      padding:.55rem .9rem;
-      border:1px solid transparent;
-      border-radius:8px;
-      font-size:.82rem;
-      font-weight:650;
+      border: 1px solid transparent;
+      border-radius: 8px;
+      padding: .55rem .9rem;
+      font-weight: 650;
+      font-size: .82rem;
     }
-    .btn-primary { background:var(--primary); color:#fff; }
-    .btn-primary:hover { background:var(--primary-dark); }
-    .btn-secondary {
-      background:#fff;
-      border-color:var(--border);
-      color:var(--text);
-    }
-    .btn-secondary:hover { background:var(--surface-soft); }
-    .btn-danger {
-      background:#fff;
-      border-color:#efb4b4;
-      color:var(--danger);
-    }
+    .btn-primary { background: var(--primary); color: #fff; }
+    .btn-primary:hover { background: var(--primary-dark); }
+    .btn-secondary { background: #fff; border-color: var(--border); color: var(--text); }
+    .btn-secondary:hover { background: var(--surface-soft); }
+    .btn-danger { background: #fff; border-color: #efb4b4; color: var(--danger); }
     .board {
-      display:flex;
-      align-items:flex-start;
-      gap:1rem;
-      min-height:calc(100vh - 74px);
-      overflow-x:auto;
-      padding:1.25rem 1.5rem 2rem;
+      display: flex;
+      align-items: flex-start;
+      gap: 1rem;
+      min-height: calc(100vh - 74px);
+      overflow-x: auto;
+      padding: 1.25rem 1.5rem 2rem;
     }
     .column {
-      display:flex;
-      flex-direction:column;
-      width:285px;
-      min-width:285px;
-      max-height:calc(100vh - 110px);
-      background:#eef1f5;
-      border:1px solid var(--border);
-      border-radius:var(--radius);
+      display: flex;
+      flex-direction: column;
+      width: 285px;
+      min-width: 285px;
+      max-height: calc(100vh - 110px);
+      background: #eef1f5;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      transition: border-color .15s, background .15s;
     }
-    .column.drag-over {
-      border-color:var(--primary);
-      background:#e8e7ff;
-    }
+    .column.drag-over { border-color: var(--primary); background: #e8e7ff; }
     .column-header {
-      display:flex;
-      align-items:center;
-      justify-content:space-between;
-      padding:.8rem .85rem;
-      border-bottom:1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: .8rem .85rem;
+      border-bottom: 1px solid var(--border);
     }
-    .column-title {
-      display:flex;
-      align-items:center;
-      gap:.5rem;
-      font-size:.8rem;
-      font-weight:750;
-    }
-    .column-dot {
-      width:9px;
-      height:9px;
-      border-radius:50%;
-    }
-    .column-count {
-      padding:.15rem .45rem;
-      border-radius:20px;
-      background:#fff;
-      color:var(--muted);
-      font-size:.72rem;
-    }
-    .card-list {
-      display:flex;
-      flex-direction:column;
-      gap:.65rem;
-      min-height:70px;
-      overflow-y:auto;
-      padding:.7rem;
-    }
-    .empty {
-      padding:1rem .5rem;
-      color:var(--muted);
-      font-size:.78rem;
-      text-align:center;
-    }
+    .column-title { display: flex; align-items: center; gap: .5rem; font-size: .8rem; font-weight: 750; }
+    .column-dot { width: 9px; height: 9px; border-radius: 50%; }
+    .column-count { color: var(--muted); font-size: .72rem; background: #fff; padding: .15rem .45rem; border-radius: 20px; }
+    .card-list { display: flex; flex-direction: column; gap: .65rem; min-height: 70px; overflow-y: auto; padding: .7rem; }
+    .empty { padding: 1rem .5rem; text-align: center; color: var(--muted); font-size: .78rem; }
     .task-card {
-      position:relative;
-      padding:.8rem;
-      background:var(--surface);
-      border:1px solid var(--border);
-      border-radius:8px;
-      cursor:pointer;
+      position: relative;
+      padding: .8rem;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      box-shadow: 0 1px 2px rgba(15, 23, 42, .04);
+      cursor: pointer;
+      transition: transform .15s, border-color .15s, box-shadow .15s;
     }
-    .task-card:hover {
-      transform:translateY(-1px);
-      border-color:#aaa6f5;
-      box-shadow:0 5px 16px rgba(15,23,42,.08);
-    }
-    .task-card.dragging { opacity:.45; }
-    .card-title {
-      margin:0 1.5rem .55rem 0;
-      font-size:.88rem;
-      line-height:1.4;
-    }
-    .card-delete {
-      position:absolute;
-      top:.55rem;
-      right:.55rem;
-      border:0;
-      background:transparent;
-      color:#98a2b3;
-    }
-    .card-delete:hover { color:var(--danger); }
-    .card-meta,.mobile-task-meta {
-      display:flex;
-      flex-wrap:wrap;
-      gap:.35rem;
-      margin-bottom:.5rem;
-    }
-    .pill {
-      padding:.17rem .45rem;
-      border-radius:20px;
-      background:#eef2ff;
-      color:#4338ca;
-      font-size:.66rem;
-      font-weight:650;
-    }
-    .priority-high { background:#fee2e2; color:#b91c1c; }
-    .priority-medium { background:#fef3c7; color:#92400e; }
-    .priority-low { background:#dcfce7; color:#166534; }
-    .card-line {
-      margin:.3rem 0 0;
-      color:var(--muted);
-      font-size:.72rem;
-      line-height:1.35;
-    }
-    .card-line strong { color:#475467; }
-    .add-task {
-      margin:0 .7rem .7rem;
-      padding:.5rem;
-      border:1px dashed #b8c0cc;
-      border-radius:7px;
-      background:transparent;
-      color:#596579;
-      font-size:.78rem;
-    }
-    .add-task:hover {
-      background:#fff;
-      border-color:var(--primary);
-      color:var(--primary);
-    }
+    .task-card:hover { transform: translateY(-1px); border-color: #aaa6f5; box-shadow: 0 5px 16px rgba(15, 23, 42, .08); }
+    .task-card.dragging { opacity: .45; }
+    .card-title { margin: 0 1.5rem .55rem 0; font-size: .88rem; line-height: 1.4; }
+    .card-delete { position: absolute; top: .55rem; right: .55rem; border: 0; background: transparent; color: #98a2b3; font-size: .85rem; }
+    .card-delete:hover { color: var(--danger); }
+    .card-meta { display: flex; flex-wrap: wrap; gap: .35rem; margin-bottom: .5rem; }
+    .pill { border-radius: 20px; padding: .17rem .45rem; background: #eef2ff; color: #4338ca; font-size: .66rem; font-weight: 650; }
+    .priority-high { background: #fee2e2; color: #b91c1c; }
+    .priority-medium { background: #fef3c7; color: #92400e; }
+    .priority-low { background: #dcfce7; color: #166534; }
+    .card-line { margin: .3rem 0 0; color: var(--muted); font-size: .72rem; line-height: 1.35; }
+    .card-line strong { color: #475467; }
+    .add-task { margin: 0 .7rem .7rem; border: 1px dashed #b8c0cc; border-radius: 7px; padding: .5rem; background: transparent; color: #596579; font-size: .78rem; }
+    .add-task:hover { background: #fff; border-color: var(--primary); color: var(--primary); }
     .modal-backdrop {
-      position:fixed;
-      inset:0;
-      z-index:100;
-      display:flex;
-      align-items:center;
-      justify-content:center;
-      padding:1rem;
-      background:rgba(15,23,42,.55);
+      position: fixed;
+      inset: 0;
+      z-index: 100;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 1rem;
+      background: rgba(15, 23, 42, .55);
     }
     .modal {
-      width:min(820px,100%);
-      max-height:calc(100vh - 2rem);
-      overflow-y:auto;
-      background:#fff;
-      border-radius:14px;
-      box-shadow:0 12px 36px rgba(15,23,42,.14);
+      width: min(820px, 100%);
+      max-height: calc(100vh - 2rem);
+      overflow-y: auto;
+      background: var(--surface);
+      border-radius: 14px;
+      box-shadow: var(--shadow);
     }
-    .modal-header,.modal-actions {
-      display:flex;
-      align-items:flex-start;
-      justify-content:space-between;
-      gap:1rem;
-      padding:1.2rem 1.35rem;
-      border-bottom:1px solid var(--border);
-    }
-    .modal-header h2 { margin:0; font-size:1.1rem; }
-    .modal-header p {
-      margin:.25rem 0 0;
-      color:var(--muted);
-      font-size:.78rem;
-    }
-    .close-button {
-      border:0;
-      background:transparent;
-      color:var(--muted);
-      font-size:1.3rem;
-    }
-    .form-body { padding:1.2rem 1.35rem; }
-    .form-grid {
-      display:grid;
-      grid-template-columns:repeat(2,minmax(0,1fr));
-      gap:.9rem 1rem;
-    }
-    .field,.filter-field {
-      display:flex;
-      flex-direction:column;
-      gap:.35rem;
-    }
-    .field.full { grid-column:1/-1; }
-    label {
-      color:#344054;
-      font-size:.76rem;
-      font-weight:700;
-    }
-    input,select,textarea {
-      width:100%;
-      padding:.58rem .65rem;
-      border:1px solid #cfd5dd;
-      border-radius:7px;
-      outline:none;
-      background:#fff;
-      color:var(--text);
-      font-size:.83rem;
-    }
-    input:focus,select:focus,textarea:focus {
-      border-color:var(--primary);
-      box-shadow:0 0 0 3px rgba(79,70,229,.1);
-    }
-    textarea {
-      min-height:82px;
-      resize:vertical;
-      line-height:1.45;
-    }
-    textarea.long { min-height:115px; }
-    .modal-actions {
-      align-items:center;
-      padding:1rem 1.35rem;
-      border:0;
-      border-top:1px solid var(--border);
-      background:var(--surface-soft);
-    }
-    .required { color:var(--danger); }
-    .account-email {
-      max-width:220px;
-      overflow:hidden;
-      color:var(--muted);
-      font-size:.76rem;
-      text-overflow:ellipsis;
-      white-space:nowrap;
-    }
-    .sync-status {
-      display:inline-flex;
-      align-items:center;
-      gap:.35rem;
-      padding:.28rem .55rem;
-      border-radius:20px;
-      background:#eef2f6;
-      color:#475467;
-      font-size:.7rem;
-      font-weight:700;
-    }
-    .sync-status::before {
-      width:7px;
-      height:7px;
-      border-radius:50%;
-      background:#98a2b3;
-      content:"";
-    }
-    .sync-status.synced::before { background:#22c55e; }
-    .sync-status.syncing::before { background:#f59e0b; }
-    .sync-status.failed::before { background:#ef4444; }
-    .welcome-wrap {
-      display:grid;
-      min-height:calc(100vh - 75px);
-      padding:2rem 1rem;
-      place-items:center;
-    }
-    .welcome-card {
-      width:min(560px,100%);
-      padding:2rem;
-      border:1px solid var(--border);
-      border-radius:14px;
-      background:#fff;
-      text-align:center;
-    }
-    .welcome-card h2 { margin:0 0 .65rem; }
-    .welcome-card p {
-      margin:0 auto 1.25rem;
-      color:var(--muted);
-      line-height:1.6;
-    }
-    .setup-note,.error-note {
-      margin-top:1rem;
-      padding:.75rem;
-      border-radius:8px;
-      font-size:.78rem;
-      text-align:left;
-    }
-    .setup-note { background:#fff7ed; color:#9a3412; }
-    .error-note { background:#fef2f2; color:#b91c1c; }
-    .import-banner {
-      display:flex;
-      align-items:center;
-      justify-content:space-between;
-      gap:1rem;
-      margin:1rem 1.5rem 0;
-      padding:.75rem 1rem;
-      border:1px solid #c7d2fe;
-      border-radius:9px;
-      background:#eef2ff;
-      color:#3730a3;
-      font-size:.8rem;
-    }
-    .import-banner.error-note {
-      border-color:#fecaca;
-      background:#fef2f2;
-      color:#b91c1c;
-    }
-    .loading-board {
-      padding:3rem;
-      color:var(--muted);
-      text-align:center;
-    }
+    .modal-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; padding: 1.2rem 1.35rem; border-bottom: 1px solid var(--border); }
+    .modal-header h2 { margin: 0; font-size: 1.1rem; }
+    .modal-header p { margin: .25rem 0 0; color: var(--muted); font-size: .78rem; }
+    .close-button { border: 0; background: transparent; color: var(--muted); font-size: 1.3rem; line-height: 1; }
+    .form-body { padding: 1.2rem 1.35rem; }
+    .form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .9rem 1rem; }
+    .field { display: flex; flex-direction: column; gap: .35rem; }
+    .field.full { grid-column: 1 / -1; }
+    label { color: #344054; font-size: .76rem; font-weight: 700; }
+    input, select, textarea { width: 100%; border: 1px solid #cfd5dd; border-radius: 7px; padding: .58rem .65rem; background: #fff; color: var(--text); font-size: .83rem; outline: none; }
+    input:focus, select:focus, textarea:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(79, 70, 229, .1); }
+    textarea { min-height: 82px; resize: vertical; line-height: 1.45; }
+    textarea.long { min-height: 115px; }
+    .hint { margin: 0; color: var(--muted); font-size: .7rem; }
+    .modal-actions { display: flex; justify-content: space-between; gap: .75rem; padding: 1rem 1.35rem; border-top: 1px solid var(--border); background: var(--surface-soft); border-radius: 0 0 14px 14px; }
+    .action-group { display: flex; gap: .6rem; }
+    .required { color: var(--danger); }
+    .account-area { display: flex; align-items: center; gap: .65rem; }
+    .account-email { max-width: 220px; overflow: hidden; text-overflow: ellipsis; color: var(--muted); font-size: .76rem; white-space: nowrap; }
+    .sync-status { display: inline-flex; align-items: center; gap: .35rem; border-radius: 20px; padding: .28rem .55rem; background: #eef2f6; color: #475467; font-size: .7rem; font-weight: 700; }
+    .sync-status::before { width: 7px; height: 7px; border-radius: 50%; background: #98a2b3; content: ""; }
+    .sync-status.synced::before { background: #22c55e; }
+    .sync-status.syncing::before { background: #f59e0b; }
+    .sync-status.failed::before { background: #ef4444; }
+    .welcome-wrap { display: grid; min-height: calc(100vh - 75px); padding: 2rem 1rem; place-items: center; }
+    .welcome-card { width: min(560px, 100%); padding: 2rem; border: 1px solid var(--border); border-radius: 14px; background: var(--surface); box-shadow: 0 8px 28px rgba(15, 23, 42, .08); text-align: center; }
+    .welcome-card h2 { margin: 0 0 .65rem; }
+    .welcome-card p { margin: 0 auto 1.25rem; color: var(--muted); line-height: 1.6; }
+    .setup-note, .error-note { margin-top: 1rem; border-radius: 8px; padding: .75rem; font-size: .78rem; line-height: 1.45; text-align: left; }
+    .setup-note { background: #fff7ed; color: #9a3412; }
+    .error-note { background: #fef2f2; color: #b91c1c; }
+    .import-banner { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin: 1rem 1.5rem 0; padding: .75rem 1rem; border: 1px solid #c7d2fe; border-radius: 9px; background: #eef2ff; color: #3730a3; font-size: .8rem; }
+    .import-banner.error-note { border-color: #fecaca; background: #fef2f2; color: #b91c1c; }
+    .loading-board { padding: 3rem; color: var(--muted); text-align: center; }
     .view-toolbar {
-      display:flex;
-      padding:1rem 1.5rem 0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      padding: 1rem 1.5rem 0;
     }
     .view-switcher {
-      display:inline-flex;
-      padding:.22rem;
-      border:1px solid var(--border);
-      border-radius:9px;
-      background:#e9edf2;
+      display: inline-flex;
+      padding: .22rem;
+      border: 1px solid var(--border);
+      border-radius: 9px;
+      background: #e9edf2;
     }
     .view-button {
-      padding:.48rem .8rem;
-      border:0;
-      border-radius:7px;
-      background:transparent;
-      color:var(--muted);
-      font-size:.8rem;
-      font-weight:700;
+      padding: .48rem .8rem;
+      border: 0;
+      border-radius: 7px;
+      background: transparent;
+      color: var(--muted);
+      font-size: .8rem;
+      font-weight: 700;
     }
     .view-button.active {
-      background:#fff;
-      color:var(--primary);
-      box-shadow:0 1px 4px rgba(15,23,42,.12);
+      background: #fff;
+      color: var(--primary);
+      box-shadow: 0 1px 4px rgba(15, 23, 42, .12);
     }
-    .table-view { padding:1rem 1.5rem 2rem; }
+    .table-view { padding: 1rem 1.5rem 2rem; }
     .filters {
-      display:grid;
-      grid-template-columns:minmax(210px,2fr) repeat(3,minmax(140px,1fr));
-      gap:.75rem;
-      margin-bottom:.8rem;
-      padding:1rem;
-      border:1px solid var(--border);
-      border-radius:10px;
-      background:#fff;
+      display: grid;
+      grid-template-columns: minmax(210px, 2fr) repeat(3, minmax(140px, 1fr));
+      gap: .75rem;
+      margin-bottom: .8rem;
+      padding: 1rem;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: var(--surface);
     }
-    .filter-field label { font-size:.7rem; }
-    .date-filters {
-      display:grid;
-      grid-template-columns:1fr 1fr;
-      gap:.55rem;
-      grid-column:span 2;
-    }
-    .filter-checks {
-      display:flex;
-      align-items:center;
-      flex-wrap:wrap;
-      gap:.75rem 1rem;
-      grid-column:span 2;
-    }
-    .check-label {
-      display:inline-flex;
-      align-items:center;
-      gap:.4rem;
-      color:#475467;
-      font-size:.76rem;
-      cursor:pointer;
-    }
-    .check-label input { width:auto; }
-    .sort-controls {
-      display:flex;
-      align-items:end;
-      gap:.45rem;
-      grid-column:span 2;
-    }
-    .sort-controls .filter-field { flex:1; }
-    .sort-direction { min-width:92px; }
-    .results-summary {
-      margin:0 0 .65rem;
-      color:var(--muted);
-      font-size:.76rem;
-    }
-    .task-table-wrap {
-      overflow-x:auto;
-      border:1px solid var(--border);
-      border-radius:10px;
-      background:#fff;
-    }
-    .task-table {
-      width:100%;
-      min-width:1120px;
-      border-collapse:collapse;
-    }
-    .task-table th {
-      padding:.7rem .75rem;
-      border-bottom:1px solid var(--border);
-      background:var(--surface-soft);
-      color:#475467;
-      font-size:.7rem;
-      text-align:left;
-      white-space:nowrap;
-    }
-    .task-table td {
-      max-width:220px;
-      padding:.72rem .75rem;
-      border-bottom:1px solid #edf0f3;
-      color:#475467;
-      font-size:.76rem;
-      vertical-align:top;
-    }
-    .task-table tbody tr { cursor:pointer; }
-    .task-table tbody tr:hover,.task-table tbody tr:focus {
-      outline:none;
-      background:#f8f7ff;
-    }
-    .table-title { color:var(--text); font-weight:700; }
-    .table-summary {
-      display:-webkit-box;
-      overflow:hidden;
-      -webkit-box-orient:vertical;
-      -webkit-line-clamp:2;
-    }
-    .mobile-task-list { display:none; }
-    .mobile-task-card {
-      padding:.9rem;
-      border:1px solid var(--border);
-      border-radius:9px;
-      background:#fff;
-      cursor:pointer;
-    }
-    .mobile-task-card h3 {
-      margin:0 0 .55rem;
-      font-size:.9rem;
-    }
-    .mobile-task-card p {
-      margin:.3rem 0 0;
-      color:var(--muted);
-      font-size:.74rem;
-      line-height:1.4;
-    }
-    @media(max-width:700px) {
-      header {
-        align-items:flex-start;
-        padding:.85rem 1rem;
-      }
-      .brand p,.stats,.account-email { display:none; }
-      .board { padding:1rem; }
-      .column {
-        width:270px;
-        min-width:270px;
-      }
-      .form-grid,.filters { grid-template-columns:1fr; }
-      .field.full,.date-filters,.filter-checks,.sort-controls {
-        grid-column:auto;
-      }
-      .modal-actions {
-        align-items:stretch;
-        flex-direction:column-reverse;
-      }
-      .header-actions,.account-area { gap:.4rem; }
-      .import-banner {
-        align-items:stretch;
-        flex-direction:column;
-        margin:.75rem 1rem 0;
-      }
-      .view-toolbar { padding:.75rem 1rem 0; }
-      .view-switcher { width:100%; }
-      .view-button { flex:1; }
-      .table-view { padding:.75rem 1rem 1.5rem; }
-      .filters { padding:.8rem; }
-      .date-filters { grid-template-columns:1fr; }
-      .sort-controls {
-        align-items:stretch;
-        flex-direction:column;
-      }
-      .task-table-wrap { display:none; }
-      .mobile-task-list {
-        display:flex;
-        flex-direction:column;
-        gap:.65rem;
-      }
+    .filter-field { display: flex; flex-direction: column; gap: .3rem; }
+    .filter-field label { font-size: .7rem; }
+    .date-filters { display: grid; grid-template-columns: 1fr 1fr; gap: .55rem; grid-column: span 2; }
+    .filter-checks { display: flex; align-items: center; flex-wrap: wrap; gap: .75rem 1rem; grid-column: span 2; }
+    .check-label { display: inline-flex; align-items: center; gap: .4rem; color: #475467; font-size: .76rem; font-weight: 650; cursor: pointer; }
+    .check-label input { width: auto; }
+    .sort-controls { display: flex; align-items: end; gap: .45rem; grid-column: span 2; }
+    .sort-controls .filter-field { flex: 1; }
+    .sort-direction { min-width: 92px; }
+    .results-summary { margin: 0 0 .65rem; color: var(--muted); font-size: .76rem; }
+    .task-table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); }
+    .task-table { width: 100%; min-width: 1120px; border-collapse: collapse; }
+    .task-table th { padding: .7rem .75rem; border-bottom: 1px solid var(--border); background: var(--surface-soft); color: #475467; font-size: .7rem; text-align: left; white-space: nowrap; }
+    .task-table td { max-width: 220px; padding: .72rem .75rem; border-bottom: 1px solid #edf0f3; color: #475467; font-size: .76rem; vertical-align: top; }
+    .task-table tbody tr { cursor: pointer; }
+    .task-table tbody tr:hover, .task-table tbody tr:focus { outline: none; background: #f8f7ff; }
+    .task-table tbody tr:last-child td { border-bottom: 0; }
+    .table-title { color: var(--text); font-weight: 700; }
+    .table-summary { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-height: 1.4; }
+    .mobile-task-list { display: none; }
+    .mobile-task-card { padding: .9rem; border: 1px solid var(--border); border-radius: 9px; background: var(--surface); cursor: pointer; }
+    .mobile-task-card h3 { margin: 0 0 .55rem; font-size: .9rem; }
+    .mobile-task-meta { display: flex; flex-wrap: wrap; gap: .35rem; margin-bottom: .55rem; }
+    .mobile-task-card p { margin: .3rem 0 0; color: var(--muted); font-size: .74rem; line-height: 1.4; }
+    .quick-entry { grid-column: 1 / -1; padding: 1rem; border: 1px solid #c7d2fe; border-radius: 10px; background: #f7f7ff; }
+    .quick-entry h3 { margin: 0 0 .25rem; font-size: .95rem; }
+    .quick-entry-intro { margin: 0 0 .7rem; color: var(--muted); font-size: .75rem; line-height: 1.45; }
+    .quick-entry textarea { min-height: 125px; background: #fff; }
+    .quick-actions { display: flex; align-items: center; flex-wrap: wrap; gap: .5rem; margin-top: .6rem; }
+    .parse-message { margin: .65rem 0 0; color: #b45309; font-size: .76rem; line-height: 1.4; }
+    .parsed-preview { margin-top: .75rem; padding: .8rem; border: 1px solid #d9dff0; border-radius: 8px; background: #fff; }
+    .parsed-preview h4 { margin: 0 0 .55rem; font-size: .8rem; }
+    .preview-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .4rem .8rem; }
+    .preview-item { min-width: 0; color: #475467; font-size: .73rem; line-height: 1.4; word-break: break-word; }
+    .preview-item strong { color: var(--text); }
+    .settings-modal { width: min(620px, 100%); }
+    .settings-warning { margin: 0 0 1rem; padding: .75rem; border-radius: 8px; background: #fff7ed; color: #9a3412; font-size: .76rem; line-height: 1.45; }
+    .settings-actions { display: flex; justify-content: flex-end; gap: .6rem; }
+    .mic-active { background: #fee2e2; border-color: #fca5a5; color: #b91c1c; }
+    @media (max-width: 700px) {
+      header { align-items: flex-start; padding: .85rem 1rem; }
+      .brand p, .stats { display: none; }
+      .board { padding: 1rem; }
+      .column { width: 270px; min-width: 270px; }
+      .form-grid { grid-template-columns: 1fr; }
+      .field.full { grid-column: auto; }
+      .modal-actions { align-items: stretch; flex-direction: column-reverse; }
+      .action-group { justify-content: flex-end; }
+      .account-email { display: none; }
+      .account-area { gap: .4rem; }
+      .header-actions { gap: .45rem; }
+      .sync-status { padding: .28rem .42rem; }
+      .import-banner { align-items: stretch; flex-direction: column; margin: .75rem 1rem 0; }
+      .view-toolbar { padding: .75rem 1rem 0; }
+      .view-switcher { width: 100%; }
+      .view-button { flex: 1; }
+      .table-view { padding: .75rem 1rem 1.5rem; }
+      .filters { grid-template-columns: 1fr; padding: .8rem; }
+      .date-filters, .filter-checks, .sort-controls { grid-column: auto; }
+      .date-filters { grid-template-columns: 1fr; }
+      .sort-controls { align-items: stretch; flex-direction: column; }
+      .task-table-wrap { display: none; }
+      .mobile-task-list { display: flex; flex-direction: column; gap: .65rem; }
+      .preview-grid { grid-template-columns: 1fr; }
+      .quick-actions .btn { flex: 1; }
     }
   </style>
 </head>
@@ -563,31 +301,30 @@
     } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js";
 
     const firebaseConfig = {
-  apiKey: "AIzaSyCKGbvtSSJxp_0xLFc_gVXnnCDcFYPCYS8",
-  authDomain: "daily-work-tracker-rayson.firebaseapp.com",
-  projectId: "daily-work-tracker-rayson",
-  storageBucket: "daily-work-tracker-rayson.firebasestorage.app",
-  messagingSenderId: "270547399087",
-  appId: "1:270547399087:web:9b2b9fd72bc9c71abe3f5a"
-};
+      apiKey: "AIzaSyCKGbvtSSJxp_0xLFc_gVXnnCDcFYPCYS8",
+      authDomain: "daily-work-tracker-rayson.firebaseapp.com",
+      projectId: "daily-work-tracker-rayson",
+      storageBucket: "daily-work-tracker-rayson.firebasestorage.app",
+      messagingSenderId: "270547399087",
+      appId: "1:270547399087:web:9b2b9fd72bc9c71abe3f5a"
+    };
 
-    const configured=!Object.values(firebaseConfig).some(
-      value=>typeof value==="string"&&value.includes("YOUR_")
+    const configured = !Object.values(firebaseConfig).some(
+      value => typeof value === "string" && value.includes("YOUR_")
     );
 
     try {
-      if(!configured) {
-        window.firebaseServices={configured:false};
+      if (!configured) {
+        window.firebaseServices = { configured: false };
       } else {
-        const app=initializeApp(firebaseConfig);
-        const auth=getAuth(app);
-
-        await setPersistence(auth,browserLocalPersistence);
-
-        window.firebaseServices={
-          configured:true,
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        await setPersistence(auth, browserLocalPersistence);
+        const db = getFirestore(app);
+        window.firebaseServices = {
+          configured: true,
           auth,
-          db:getFirestore(app),
+          db,
           GoogleAuthProvider,
           onAuthStateChanged,
           signInWithPopup,
@@ -601,270 +338,699 @@
           writeBatch
         };
       }
-    } catch(error) {
-      console.error("Firebase could not start",error);
-      window.firebaseServices={configured:false,error};
+    } catch (error) {
+      console.error("Firebase could not start", error);
+      window.firebaseServices = { configured: false, error };
     }
 
     window.dispatchEvent(new CustomEvent("firebase-ready"));
   </script>
 
   <script type="text/babel">
-    const {useEffect,useMemo,useRef,useState}=React;
+    const { useEffect, useMemo, useRef, useState } = React;
 
-    const STORAGE_KEY="dailyWorkTrackerTasks";
-    const LEGACY_KEY="kanban";
-    const CACHE_PREFIX="dailyWorkTrackerCache:";
-
-    const COLUMNS=[
-      {id:"new",title:"New",color:"#64748b"},
-      {id:"todo",title:"To Do",color:"#8b5cf6"},
-      {id:"inprogress",title:"In Progress",color:"#f59e0b"},
-      {id:"feedback",title:"Waiting for Feedback",color:"#0ea5e9"},
-      {id:"done",title:"Done",color:"#22c55e"},
-      {id:"archived",title:"Archived",color:"#94a3b8"}
+    const STORAGE_KEY = "dailyWorkTrackerTasks";
+    const LEGACY_KEY = "kanban";
+    const CACHE_PREFIX = "dailyWorkTrackerCache:";
+    const COLUMNS = [
+      { id: "new", title: "New", color: "#64748b" },
+      { id: "todo", title: "To Do", color: "#8b5cf6" },
+      { id: "inprogress", title: "In Progress", color: "#f59e0b" },
+      { id: "feedback", title: "Waiting for Feedback", color: "#0ea5e9" },
+      { id: "done", title: "Done", color: "#22c55e" },
+      { id: "archived", title: "Archived", color: "#94a3b8" }
     ];
+    const PRIORITIES = ["Low", "Medium", "High"];
 
-    const PRIORITIES=["Low","Medium","High"];
-    const today=()=>new Date().toISOString().slice(0,10);
-    const makeId=()=>`task-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    const today = () => new Date().toISOString().slice(0, 10);
+    const makeId = () => `task-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 
-    const blankTask=status=>({
-      id:makeId(),
-      status:status||"new",
-      title:"",
-      source:"",
-      receivedDate:today(),
-      project:"",
-      background:"",
-      priority:"Medium",
-      deadline:"",
-      nextAction:"",
-      processNotes:"",
-      feedbackRecords:"",
-      finalResult:"",
-      links:"",
-      order:0,
-      createdAt:null,
-      updatedAt:null
+    const blankTask = status => ({
+      id: makeId(),
+      status: status || "new",
+      title: "",
+      source: "",
+      receivedDate: today(),
+      project: "",
+      background: "",
+      priority: "Medium",
+      deadline: "",
+      nextAction: "",
+      processNotes: "",
+      feedbackRecords: "",
+      finalResult: "",
+      links: "",
+      order: 0,
+      createdAt: null,
+      updatedAt: null
     });
 
     function normalizeTask(task) {
-      const originalStatus=task.status||task.col||"new";
-      const status=originalStatus==="review"?"feedback":originalStatus;
-
+      const oldStatus = task.status || task.col || "new";
+      const status = oldStatus === "review" ? "feedback" : oldStatus;
       return {
         ...blankTask(status),
         ...task,
-        id:task.id||makeId(),
+        id: task.id || makeId(),
         status,
-        title:task.title||task.text||"Untitled task",
-        project:task.project||task.tag||"",
-        background:task.background||"",
-        source:task.source||"",
-        receivedDate:task.receivedDate||"",
-        priority:PRIORITIES.includes(task.priority)?task.priority:"Medium",
-        deadline:task.deadline||"",
-        nextAction:task.nextAction||"",
-        processNotes:task.processNotes||"",
-        feedbackRecords:task.feedbackRecords||"",
-        finalResult:task.finalResult||"",
-        links:task.links||"",
-        order:Number.isFinite(task.order)?task.order:0,
-        createdAt:task.createdAt||null,
-        updatedAt:task.updatedAt||null
+        title: task.title || task.text || "Untitled task",
+        project: task.project || task.tag || "",
+        background: task.background || "",
+        source: task.source || "",
+        receivedDate: task.receivedDate || "",
+        priority: PRIORITIES.includes(task.priority) ? task.priority : "Medium",
+        deadline: task.deadline || "",
+        nextAction: task.nextAction || "",
+        processNotes: task.processNotes || "",
+        feedbackRecords: task.feedbackRecords || "",
+        finalResult: task.finalResult || "",
+        links: task.links || "",
+        order: Number.isFinite(task.order) ? task.order : 0,
+        createdAt: task.createdAt || null,
+        updatedAt: task.updatedAt || null
       };
     }
 
     function loadLocalTasks() {
       try {
-        const saved=localStorage.getItem(STORAGE_KEY);
-        if(saved) return JSON.parse(saved).map(normalizeTask);
-
-        const legacy=localStorage.getItem(LEGACY_KEY);
-        if(legacy) return JSON.parse(legacy).map(normalizeTask);
-      } catch(error) {
-        console.warn("Could not load saved tasks",error);
+        const saved = localStorage.getItem(STORAGE_KEY);
+        if (saved) return JSON.parse(saved).map(normalizeTask);
+        const legacy = localStorage.getItem(LEGACY_KEY);
+        if (legacy) return JSON.parse(legacy).map(normalizeTask);
+      } catch (error) {
+        console.warn("Could not load saved tasks", error);
       }
-
       return [];
     }
 
     function loadCache(uid) {
       try {
-        const saved=localStorage.getItem(`${CACHE_PREFIX}${uid}`);
-        return saved?JSON.parse(saved).map(normalizeTask):[];
+        const saved = localStorage.getItem(`${CACHE_PREFIX}${uid}`);
+        return saved ? JSON.parse(saved).map(normalizeTask) : [];
       } catch {
         return [];
       }
     }
 
-    function saveCache(uid,tasks) {
+    function saveCache(uid, tasks) {
       try {
-        localStorage.setItem(`${CACHE_PREFIX}${uid}`,JSON.stringify(tasks));
-      } catch(error) {
-        console.warn("Could not update the local task cache",error);
+        localStorage.setItem(`${CACHE_PREFIX}${uid}`, JSON.stringify(tasks));
+      } catch (error) {
+        console.warn("Could not update the local task cache", error);
       }
     }
 
-    function taskForFirestore(task,timestamp,isNewRecord=false) {
-      const data={
-        title:task.title||"",
-        source:task.source||"",
-        receivedDate:task.receivedDate||"",
-        project:task.project||"",
-        background:task.background||"",
-        priority:task.priority||"Medium",
-        deadline:task.deadline||"",
-        nextAction:task.nextAction||"",
-        processNotes:task.processNotes||"",
-        feedbackRecords:task.feedbackRecords||"",
-        finalResult:task.finalResult||"",
-        links:task.links||"",
-        status:task.status||"new",
-        order:Number.isFinite(task.order)?task.order:0,
-        updatedAt:timestamp
+    function taskForFirestore(task, timestamp, isNewRecord = false) {
+      const data = {
+        title: task.title || "",
+        source: task.source || "",
+        receivedDate: task.receivedDate || "",
+        project: task.project || "",
+        background: task.background || "",
+        priority: task.priority || "Medium",
+        deadline: task.deadline || "",
+        nextAction: task.nextAction || "",
+        processNotes: task.processNotes || "",
+        feedbackRecords: task.feedbackRecords || "",
+        finalResult: task.finalResult || "",
+        links: task.links || "",
+        status: task.status || "new",
+        order: Number.isFinite(task.order) ? task.order : 0,
+        updatedAt: timestamp
       };
-
-      if(task.createdAt) data.createdAt=task.createdAt;
-      else if(isNewRecord) data.createdAt=timestamp;
-
+      if (task.createdAt) data.createdAt = task.createdAt;
+      else if (isNewRecord) data.createdAt = timestamp;
       return data;
     }
 
     function toDate(value) {
-      if(!value) return null;
-
-      if(typeof value.toDate==="function") {
-        return value.toDate();
+      if (!value) return null;
+      if (typeof value.toDate === "function") return value.toDate();
+      if (typeof value === "object" && Number.isFinite(value.seconds)) return new Date(value.seconds * 1000);
+      if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
+        const [year, month, day] = value.split("-").map(Number);
+        return new Date(year, month - 1, day);
       }
-
-      if(typeof value==="object"&&Number.isFinite(value.seconds)) {
-        return new Date(value.seconds*1000);
-      }
-
-      if(typeof value==="string"&&/^\d{4}-\d{2}-\d{2}$/.test(value)) {
-        const [year,month,day]=value.split("-").map(Number);
-        return new Date(year,month-1,day);
-      }
-
-      const parsed=new Date(value);
-      return Number.isNaN(parsed.getTime())?null:parsed;
+      const parsed = new Date(value);
+      return Number.isNaN(parsed.getTime()) ? null : parsed;
     }
 
-    const createdDate=task=>toDate(task.createdAt)||toDate(task.receivedDate);
+    function createdDate(task) {
+      return toDate(task.createdAt) || toDate(task.receivedDate);
+    }
 
-    function formatDate(value,includeTime=false) {
-      const date=toDate(value);
-
-      if(!date) return "—";
-
+    function formatDate(value, includeTime = false) {
+      const date = toDate(value);
+      if (!date) return "—";
       return includeTime
-        ?date.toLocaleString([],{
-            year:"numeric",
-            month:"short",
-            day:"numeric",
-            hour:"2-digit",
-            minute:"2-digit"
-          })
-        :date.toLocaleDateString([],{
-            year:"numeric",
-            month:"short",
-            day:"numeric"
-          });
+        ? date.toLocaleString([], { year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })
+        : date.toLocaleDateString([], { year: "numeric", month: "short", day: "numeric" });
     }
 
     function dateKey(value) {
-      const date=toDate(value);
-
-      if(!date) return "";
-
-      return [
-        date.getFullYear(),
-        String(date.getMonth()+1).padStart(2,"0"),
-        String(date.getDate()).padStart(2,"0")
-      ].join("-");
+      const date = toDate(value);
+      if (!date) return "";
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, "0");
+      const day = String(date.getDate()).padStart(2, "0");
+      return `${year}-${month}-${day}`;
     }
 
-    const statusTitle=status=>
-      COLUMNS.find(column=>column.id===status)?.title||status;
+    function statusTitle(status) {
+      return COLUMNS.find(column => column.id === status)?.title || status;
+    }
+
+    const AI_SETTINGS_KEY = "dailyWorkTrackerAISettings";
+    const PARSED_FIELDS = [
+      ["title", "Title"],
+      ["source", "Source"],
+      ["project", "Project"],
+      ["background", "Background"],
+      ["receivedDate", "Received date"],
+      ["dueDate", "Due date"],
+      ["priority", "Priority"],
+      ["status", "Status"],
+      ["nextAction", "Next action"],
+      ["workflowNotes", "Workflow notes"],
+      ["feedback", "Feedback"],
+      ["finalResult", "Final result"]
+    ];
+
+    const emptyParsedResult = () =>
+      Object.fromEntries(PARSED_FIELDS.map(([key]) => [key, ""]));
+
+    function loadAISettings() {
+      const defaults = {
+        provider: "OpenAI-compatible",
+        endpoint: "",
+        apiKey: "",
+        model: ""
+      };
+      try {
+        return {
+          ...defaults,
+          ...JSON.parse(localStorage.getItem(AI_SETTINGS_KEY) || "{}")
+        };
+      } catch {
+        return defaults;
+      }
+    }
+
+    function normalizePriority(value) {
+      const text = String(value || "").trim().toLowerCase();
+      if (["high", "高", "urgent", "紧急", "重要"].includes(text)) return "High";
+      if (["medium", "中", "normal", "普通"].includes(text)) return "Medium";
+      if (["low", "低", "不急"].includes(text)) return "Low";
+      return "";
+    }
+
+    function normalizeStatus(value) {
+      const text = String(value || "").trim().toLowerCase();
+      const map = {
+        "new": "new",
+        "new task": "new",
+        "新任务": "new",
+        "to do": "todo",
+        "todo": "todo",
+        "待办": "todo",
+        "in progress": "inprogress",
+        "inprogress": "inprogress",
+        "进行中": "inprogress",
+        "waiting for feedback": "feedback",
+        "feedback": "feedback",
+        "等反馈": "feedback",
+        "等待反馈": "feedback",
+        "done": "done",
+        "完成": "done",
+        "已完成": "done",
+        "archived": "archived",
+        "归档": "archived",
+        "已归档": "archived"
+      };
+      return map[text] || "";
+    }
+
+    function normalizeParsedResult(raw) {
+      const result = emptyParsedResult();
+      PARSED_FIELDS.forEach(([key]) => {
+        const value = raw?.[key];
+        result[key] = typeof value === "string" ? value.trim() : "";
+      });
+      result.priority = normalizePriority(result.priority);
+      result.status = normalizeStatus(result.status);
+      if (result.receivedDate && !/^\d{4}-\d{2}-\d{2}$/.test(result.receivedDate)) result.receivedDate = "";
+      if (result.dueDate && !/^\d{4}-\d{2}-\d{2}$/.test(result.dueDate)) result.dueDate = "";
+      return result;
+    }
+
+    function addDays(date, days) {
+      const result = new Date(date);
+      result.setDate(result.getDate() + days);
+      return dateKey(result);
+    }
+
+    function parseDateExpression(text) {
+      const now = new Date();
+      if (/今天|today/i.test(text)) return dateKey(now);
+      if (/明天|tomorrow/i.test(text)) return addDays(now, 1);
+      if (/后天|day after tomorrow/i.test(text)) return addDays(now, 2);
+
+      let match = text.match(/(20\d{2})[-\/]([01]?\d)[-\/]([0-3]?\d)/);
+      if (match) {
+        return `${match[1]}-${String(Number(match[2])).padStart(2, "0")}-${String(Number(match[3])).padStart(2, "0")}`;
+      }
+
+      match = text.match(/([01]?\d)月([0-3]?\d)日?/);
+      if (match) {
+        return `${now.getFullYear()}-${String(Number(match[1])).padStart(2, "0")}-${String(Number(match[2])).padStart(2, "0")}`;
+      }
+      return "";
+    }
+
+    function firstMatch(text, patterns) {
+      for (const pattern of patterns) {
+        const match = text.match(pattern);
+        if (match?.[1]?.trim()) {
+          return match[1].trim().replace(/[，。；;,.]+$/, "");
+        }
+      }
+      return "";
+    }
+
+    function ruleParse(text) {
+      const result = emptyParsedResult();
+      const compact = text.trim();
+
+      if (/(高|紧急|重要|urgent|high)/i.test(compact)) result.priority = "High";
+      else if (/(中|普通|normal|medium)/i.test(compact)) result.priority = "Medium";
+      else if (/(低|不急|low)/i.test(compact)) result.priority = "Low";
+
+      const statusChecks = [
+        [/(等反馈|等待反馈|waiting for feedback)/i, "feedback"],
+        [/(进行中|in progress)/i, "inprogress"],
+        [/(待办|to do|todo)/i, "todo"],
+        [/(新任务|new task)/i, "new"],
+        [/(已完成|完成|done)/i, "done"],
+        [/(已归档|归档|archived)/i, "archived"]
+      ];
+      result.status =
+        statusChecks.find(([pattern]) => pattern.test(compact))?.[1] || "";
+
+      const dueContext = firstMatch(compact, [
+        /(?:截止(?:到|日期)?|到期(?:日)?|deadline(?: is)?|due(?: date)?(?: is)?)[：:\s]*([^，。；;\n]+)/i
+      ]);
+      result.dueDate = parseDateExpression(dueContext || compact);
+
+      result.nextAction = firstMatch(compact, [
+        /(?:下一步(?:是|为)?|接下来(?:要|是)?)[：:\s]*([^，。；;\n]+)/i,
+        /next step(?: is|:)?\s*([^,.;\n]+)/i
+      ]);
+
+      result.feedback = firstMatch(compact, [
+        /(?:客户|供应商)?反馈(?:是|说|为)?[：:\s]*([^，。；;\n]+)/i,
+        /(?:customer|supplier) feedback(?: is| says|:)?\s*([^,.;\n]+)/i
+      ]);
+
+      result.finalResult = firstMatch(compact, [
+        /(?:最终结果|结论)(?:是|为)?[：:\s]*([^，。；;\n]+)/i,
+        /result(?: is|:)?\s*([^,.;\n]+)/i
+      ]);
+
+      result.source = firstMatch(compact, [
+        /([^，。；;\n]{1,30}?)(?:让我|叫我|要求我|安排我)/,
+        /(?:assigned by|from)\s+([^,.;\n]+)/i,
+        /([^,.;\n]{1,30}?)\s+(?:asked|told) me to/i
+      ]);
+
+      result.background = firstMatch(compact, [
+        /(?:背景|原因)(?:是|为)?[：:\s]*([^，。；;\n]+)/i,
+        /(?:background|because)(?: is|:)?\s*([^,.;\n]+)/i
+      ]);
+
+      result.receivedDate =
+        /(?:今天收到|今天接到|received today)/i.test(compact)
+          ? dateKey(new Date())
+          : "";
+
+      let titleText = compact
+        .replace(/^.*?(?:让我|叫我|要求我|安排我)/, "")
+        .replace(/^.*?\b(?:asked|told) me to\b/i, "");
+
+      titleText = titleText.split(
+        /[,，。；;](?=.*(?:优先级|priority|截止|deadline|due|进行中|in progress|下一步|next step|反馈|feedback|最终结果|result))/i
+      )[0];
+
+      titleText = titleText.replace(/^(今天|明天|后天)\s*/, "").trim();
+      result.title = titleText.replace(/[，。；;,.]+$/, "");
+
+      result.project = firstMatch(compact, [
+        /(?:项目|分类)(?:是|为)?[：:\s]*([^，。；;\n]+)/i,
+        /(?:project|category)(?: is|:)?\s*([^,.;\n]+)/i,
+        /跟进(.+?)(?:修改|更新|确认|问题)(?:[，。；;]|$)/
+      ]);
+
+      const workflowSentences = compact
+        .split(/[。;；\n]/)
+        .filter(sentence =>
+          /(?:进展(?:是|为|：|:)|处理记录|已做|沟通记录|workflow notes?|progress notes?)/i.test(sentence)
+        );
+
+      result.workflowNotes = workflowSentences.join("；");
+      return normalizeParsedResult(result);
+    }
+
+    function AISettingsModal({ settings, onSave, onClose }) {
+      const [form, setForm] = useState(settings);
+      const change = event =>
+        setForm({ ...form, [event.target.name]: event.target.value });
+
+      const save = event => {
+        event.preventDefault();
+        const next = {
+          provider: form.provider.trim() || "OpenAI-compatible",
+          endpoint: form.endpoint.trim(),
+          apiKey: form.apiKey.trim(),
+          model: form.model.trim()
+        };
+        localStorage.setItem(AI_SETTINGS_KEY, JSON.stringify(next));
+        onSave(next);
+        onClose();
+      };
+
+      return (
+        <div
+          className="modal-backdrop"
+          onMouseDown={event =>
+            event.target === event.currentTarget && onClose()
+          }
+        >
+          <form className="modal settings-modal" onSubmit={save}>
+            <div className="modal-header">
+              <div>
+                <h2>AI settings</h2>
+                <p>Configure the service used by Smart Quick Entry.</p>
+              </div>
+              <button
+                type="button"
+                className="close-button"
+                aria-label="Close"
+                onClick={onClose}
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="form-body">
+              <p className="settings-warning">
+                Do not use a shared or public API key. The key is stored only in
+                this browser.
+              </p>
+
+              <div className="form-grid">
+                <div className="field full">
+                  <label htmlFor="aiProvider">AI Provider</label>
+                  <input
+                    id="aiProvider"
+                    name="provider"
+                    value={form.provider}
+                    onChange={change}
+                    placeholder="OpenAI-compatible"
+                  />
+                </div>
+
+                <div className="field full">
+                  <label htmlFor="aiEndpoint">API endpoint</label>
+                  <input
+                    id="aiEndpoint"
+                    name="endpoint"
+                    value={form.endpoint}
+                    onChange={change}
+                    placeholder="https://api.example.com/v1/chat/completions"
+                  />
+                </div>
+
+                <div className="field full">
+                  <label htmlFor="aiKey">API key</label>
+                  <input
+                    id="aiKey"
+                    type="password"
+                    name="apiKey"
+                    value={form.apiKey}
+                    onChange={change}
+                    autoComplete="off"
+                  />
+                </div>
+
+                <div className="field full">
+                  <label htmlFor="aiModel">Model name</label>
+                  <input
+                    id="aiModel"
+                    name="model"
+                    value={form.model}
+                    onChange={change}
+                    placeholder="Your provider's model name"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="modal-actions">
+              <div></div>
+              <div className="settings-actions">
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={onClose}
+                >
+                  Cancel
+                </button>
+                <button className="btn btn-primary">Save settings</button>
+              </div>
+            </div>
+          </form>
+        </div>
+      );
+    }
 
     function TaskModal({
       task,
       isNew,
       onSave,
       onDelete,
-      onClose
+      onClose,
+      aiSettings,
+      onOpenAISettings,
+      quickEntryStart
     }) {
-      const [form,setForm]=useState(task);
+      const [form, setForm] = useState(task);
+      const [quickText, setQuickText] = useState("");
+      const [parsedResult, setParsedResult] = useState(null);
+      const [parseMessage, setParseMessage] = useState("");
+      const [parsing, setParsing] = useState(false);
+      const [listening, setListening] = useState(false);
+      const quickEntryRef = useRef(null);
 
-      useEffect(()=>{
-        const closeOnEscape=event=>{
-          if(event.key==="Escape") onClose();
-        };
+      useEffect(() => {
+        const closeOnEscape = event =>
+          event.key === "Escape" && onClose();
+        window.addEventListener("keydown", closeOnEscape);
+        return () => window.removeEventListener("keydown", closeOnEscape);
+      }, [onClose]);
 
-        window.addEventListener("keydown",closeOnEscape);
+      useEffect(() => {
+        if (quickEntryStart) {
+          setTimeout(() => quickEntryRef.current?.focus(), 0);
+        }
+      }, [quickEntryStart]);
 
-        return ()=>
-          window.removeEventListener("keydown",closeOnEscape);
-      },[onClose]);
+      const change = event =>
+        setForm({ ...form, [event.target.name]: event.target.value });
 
-      const change=event=>{
-        setForm({
-          ...form,
-          [event.target.name]:event.target.value
-        });
+      const submit = event => {
+        event.preventDefault();
+        if (!form.title.trim()) return;
+        onSave({ ...form, title: form.title.trim() });
       };
 
-      const submit=event=>{
-        event.preventDefault();
+      const parseWithRules = () => {
+        if (!quickText.trim()) {
+          setParseMessage("Enter or dictate a task description first.");
+          return;
+        }
+        setParsedResult(ruleParse(quickText));
+        setParseMessage("");
+      };
 
-        if(form.title.trim()) {
-          onSave({
-            ...form,
-            title:form.title.trim()
+      const parseWithAI = async () => {
+        if (!aiSettings.endpoint || !aiSettings.apiKey || !aiSettings.model) {
+          setParseMessage(
+            "AI is not configured yet. Please add your API endpoint and API key in settings."
+          );
+          return;
+        }
+
+        if (!quickText.trim()) {
+          setParseMessage("Enter or dictate a task description first.");
+          return;
+        }
+
+        setParsing(true);
+        setParseMessage("");
+
+        const schema = Object.fromEntries(
+          PARSED_FIELDS.map(([key]) => [key, ""])
+        );
+
+        const systemPrompt =
+          `You extract task fields from Chinese or English text. ` +
+          `Return one JSON object only, with exactly this schema: ${JSON.stringify(schema)}. ` +
+          `If information is not explicitly stated, use an empty string. ` +
+          `Never invent information. Dates must be YYYY-MM-DD. ` +
+          `Today is ${dateKey(new Date())}. ` +
+          `Priority must be High, Medium, Low, or empty. ` +
+          `Status must be New, To Do, In Progress, Waiting for Feedback, Done, Archived, or empty.`;
+
+        try {
+          const response = await fetch(aiSettings.endpoint, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "Authorization": `Bearer ${aiSettings.apiKey}`
+            },
+            body: JSON.stringify({
+              model: aiSettings.model,
+              messages: [
+                { role: "system", content: systemPrompt },
+                { role: "user", content: quickText }
+              ],
+              temperature: 0,
+              response_format: { type: "json_object" }
+            })
           });
+
+          if (!response.ok) {
+            throw new Error(`API request failed (${response.status})`);
+          }
+
+          const data = await response.json();
+          let content =
+            data.choices?.[0]?.message?.content ?? data.output_text;
+
+          if (!content && Array.isArray(data.output)) {
+            content = data.output
+              .flatMap(item => item.content || [])
+              .map(item => item.text || item.content || "")
+              .join("");
+          }
+
+          if (typeof content === "object") {
+            content = JSON.stringify(content);
+          }
+
+          content = String(content || "")
+            .replace(/^```(?:json)?\s*/i, "")
+            .replace(/\s*```$/, "")
+            .trim();
+
+          setParsedResult(
+            normalizeParsedResult(JSON.parse(content))
+          );
+        } catch (error) {
+          console.error("AI parsing failed", error);
+          setParseMessage(
+            `AI Parse failed: ${error.message}. Check the endpoint, model, key, and browser CORS support.`
+          );
+        } finally {
+          setParsing(false);
         }
       };
 
-      const textareaField=(
-        label,
-        name,
-        placeholder,
-        long=false
-      )=>(
-        <div className="field full">
-          <label htmlFor={name}>{label}</label>
-          <textarea
-            className={long?"long":""}
-            id={name}
-            name={name}
-            value={form[name]}
-            onChange={change}
-            placeholder={placeholder}
-          />
-        </div>
-      );
+      const applyParsed = () => {
+        if (!parsedResult) return;
+
+        const next = { ...form };
+        const mapping = {
+          title: "title",
+          source: "source",
+          project: "project",
+          background: "background",
+          receivedDate: "receivedDate",
+          dueDate: "deadline",
+          priority: "priority",
+          status: "status",
+          nextAction: "nextAction",
+          workflowNotes: "processNotes",
+          feedback: "feedbackRecords",
+          finalResult: "finalResult"
+        };
+
+        Object.entries(mapping).forEach(([parsedKey, formKey]) => {
+          if (parsedResult[parsedKey]) {
+            next[formKey] = parsedResult[parsedKey];
+          }
+        });
+
+        setForm(next);
+        setParseMessage(
+          "Parsed values applied. Review and edit the form before saving."
+        );
+      };
+
+      const clearQuickEntry = () => {
+        setQuickText("");
+        setParsedResult(null);
+        setParseMessage("");
+        quickEntryRef.current?.focus();
+      };
+
+      const startDictation = () => {
+        const SpeechRecognition =
+          window.SpeechRecognition || window.webkitSpeechRecognition;
+
+        if (!SpeechRecognition) {
+          setParseMessage(
+            "Speech dictation is not supported in this browser. You can type or paste the paragraph instead."
+          );
+          return;
+        }
+
+        const recognition = new SpeechRecognition();
+        recognition.lang = navigator.language || "zh-CN";
+        recognition.interimResults = false;
+        recognition.continuous = false;
+        recognition.onstart = () => setListening(true);
+        recognition.onend = () => setListening(false);
+        recognition.onerror = event => {
+          setListening(false);
+          setParseMessage(`Dictation failed: ${event.error}`);
+        };
+        recognition.onresult = event => {
+          const transcript = Array.from(event.results)
+            .map(result => result[0].transcript)
+            .join(" ");
+          setQuickText(
+            current => `${current}${current ? " " : ""}${transcript}`
+          );
+        };
+        recognition.start();
+      };
 
       return (
         <div
           className="modal-backdrop"
-          onMouseDown={event=>{
-            if(event.target===event.currentTarget) onClose();
-          }}
+          onMouseDown={event =>
+            event.target === event.currentTarget && onClose()
+          }
         >
           <form className="modal" onSubmit={submit}>
             <div className="modal-header">
               <div>
-                <h2>
-                  {isNew?"Add a work task":"Task details"}
-                </h2>
+                <h2>{isNew ? "Add a work task" : "Task details"}</h2>
                 <p>
-                  Record what is useful now. You can add more
+                  Record only what is useful now. You can return and add more
                   detail later.
                 </p>
               </div>
-
               <button
                 type="button"
                 className="close-button"
@@ -877,17 +1043,111 @@
 
             <div className="form-body">
               <div className="form-grid">
+                <section className="quick-entry">
+                  <h3>Smart Quick Entry</h3>
+                  <p className="quick-entry-intro">
+                    Type, paste, or dictate a natural-language task description.
+                    Parsing creates a preview only; your form changes after you
+                    select Apply parsed result.
+                  </p>
+
+                  <textarea
+                    ref={quickEntryRef}
+                    value={quickText}
+                    onChange={event => setQuickText(event.target.value)}
+                    placeholder="Example: 老板让我今天跟进俄罗斯水槽说明书修改，优先级高，截止到7月10日，目前进行中，下一步整理问题清单，客户反馈说俄文用词需要再确认。"
+                  />
+
+                  <div className="quick-actions">
+                    <button
+                      type="button"
+                      className="btn btn-primary"
+                      onClick={parseWithAI}
+                      disabled={parsing}
+                    >
+                      {parsing ? "AI Parsing…" : "AI Parse"}
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      onClick={parseWithRules}
+                    >
+                      Rule Parse
+                    </button>
+                    <button
+                      type="button"
+                      className={`btn btn-secondary${listening ? " mic-active" : ""}`}
+                      onClick={startDictation}
+                    >
+                      {listening ? "Listening…" : "Dictate"}
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      onClick={clearQuickEntry}
+                    >
+                      Clear
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      onClick={onOpenAISettings}
+                    >
+                      AI Settings
+                    </button>
+                  </div>
+
+                  {parseMessage && (
+                    <p className="parse-message">{parseMessage}</p>
+                  )}
+
+                  {parsedResult && (
+                    <div className="parsed-preview">
+                      <h4>Parsed result preview</h4>
+                      <div className="preview-grid">
+                        {PARSED_FIELDS
+                          .filter(([key]) => parsedResult[key])
+                          .map(([key, label]) => (
+                            <div className="preview-item" key={key}>
+                              <strong>{label}:</strong>{" "}
+                              {key === "status"
+                                ? statusTitle(parsedResult[key])
+                                : parsedResult[key]}
+                            </div>
+                          ))}
+
+                        {!PARSED_FIELDS.some(
+                          ([key]) => parsedResult[key]
+                        ) && (
+                          <div className="preview-item">
+                            No task fields were detected.
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="quick-actions">
+                        <button
+                          type="button"
+                          className="btn btn-primary"
+                          onClick={applyParsed}
+                        >
+                          Apply parsed result
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </section>
+
                 <div className="field full">
                   <label htmlFor="title">
-                    Task title{" "}
-                    <span className="required">*</span>
+                    Task title <span className="required">*</span>
                   </label>
-
                   <input
                     id="title"
                     name="title"
                     value={form.title}
                     onChange={change}
+                    placeholder="What needs to be done?"
                     autoFocus
                   />
                 </div>
@@ -896,39 +1156,39 @@
                   <label htmlFor="source">
                     Task source / who assigned it
                   </label>
-
                   <input
                     id="source"
                     name="source"
                     value={form.source}
                     onChange={change}
+                    placeholder="e.g. Manager, client, self"
                   />
                 </div>
 
                 <div className="field">
-                  <label htmlFor="project">
-                    Project or category
-                  </label>
-
+                  <label htmlFor="project">Project or category</label>
                   <input
                     id="project"
                     name="project"
                     value={form.project}
                     onChange={change}
+                    placeholder="e.g. Website launch"
                   />
                 </div>
 
-                {textareaField(
-                  "Task background",
-                  "background",
-                  "Why is this task needed?"
-                )}
+                <div className="field full">
+                  <label htmlFor="background">Task background</label>
+                  <textarea
+                    id="background"
+                    name="background"
+                    value={form.background}
+                    onChange={change}
+                    placeholder="Why is this task needed? Add the request, context, or expected outcome…"
+                  />
+                </div>
 
                 <div className="field">
-                  <label htmlFor="receivedDate">
-                    Received date
-                  </label>
-
+                  <label htmlFor="receivedDate">Received date</label>
                   <input
                     id="receivedDate"
                     type="date"
@@ -940,7 +1200,6 @@
 
                 <div className="field">
                   <label htmlFor="deadline">Deadline</label>
-
                   <input
                     id="deadline"
                     type="date"
@@ -952,85 +1211,105 @@
 
                 <div className="field">
                   <label htmlFor="priority">Priority</label>
-
                   <select
                     id="priority"
                     name="priority"
                     value={form.priority}
                     onChange={change}
                   >
-                    {PRIORITIES.map(priority=>(
-                      <option key={priority}>
-                        {priority}
-                      </option>
+                    {PRIORITIES.map(priority => (
+                      <option key={priority}>{priority}</option>
                     ))}
                   </select>
                 </div>
 
                 <div className="field">
-                  <label htmlFor="status">
-                    Current progress
-                  </label>
-
+                  <label htmlFor="status">Current progress</label>
                   <select
                     id="status"
                     name="status"
                     value={form.status}
                     onChange={change}
                   >
-                    {COLUMNS.map(column=>(
-                      <option
-                        key={column.id}
-                        value={column.id}
-                      >
+                    {COLUMNS.map(column => (
+                      <option key={column.id} value={column.id}>
                         {column.title}
                       </option>
                     ))}
                   </select>
                 </div>
 
-                {textareaField(
-                  "Next action",
-                  "nextAction",
-                  "What is the next step?"
-                )}
+                <div className="field full">
+                  <label htmlFor="nextAction">Next action</label>
+                  <textarea
+                    id="nextAction"
+                    name="nextAction"
+                    value={form.nextAction}
+                    onChange={change}
+                    placeholder="What is the very next step?"
+                  />
+                </div>
 
-                {textareaField(
-                  "Work process notes",
-                  "processNotes",
-                  "Add dated notes about progress or blockers…",
-                  true
-                )}
+                <div className="field full">
+                  <label htmlFor="processNotes">Work process notes</label>
+                  <textarea
+                    className="long"
+                    id="processNotes"
+                    name="processNotes"
+                    value={form.processNotes}
+                    onChange={change}
+                    placeholder="Add dated notes about decisions, progress, conversations, or blockers…"
+                  />
+                </div>
 
-                {textareaField(
-                  "Feedback records",
-                  "feedbackRecords",
-                  "Record feedback and changes…",
-                  true
-                )}
+                <div className="field full">
+                  <label htmlFor="feedbackRecords">Feedback records</label>
+                  <textarea
+                    className="long"
+                    id="feedbackRecords"
+                    name="feedbackRecords"
+                    value={form.feedbackRecords}
+                    onChange={change}
+                    placeholder="Record who gave feedback, when, and what changed…"
+                  />
+                </div>
 
-                {textareaField(
-                  "Final result / summary",
-                  "finalResult",
-                  "What was delivered or achieved?",
-                  true
-                )}
+                <div className="field full">
+                  <label htmlFor="finalResult">Final result</label>
+                  <textarea
+                    className="long"
+                    id="finalResult"
+                    name="finalResult"
+                    value={form.finalResult}
+                    onChange={change}
+                    placeholder="What was delivered or achieved? Add the outcome when the task is complete."
+                  />
+                </div>
 
-                {textareaField(
-                  "Links or attachment notes",
-                  "links",
-                  "Paste document links or file notes here…"
-                )}
+                <div className="field full">
+                  <label htmlFor="links">Links or attachment notes</label>
+                  <textarea
+                    id="links"
+                    name="links"
+                    value={form.links}
+                    onChange={change}
+                    placeholder="Paste document links, ticket URLs, file paths, or attachment notes here…"
+                  />
+                  <p className="hint">
+                    This simple version stores text and links, not uploaded
+                    files.
+                  </p>
+                </div>
               </div>
             </div>
 
             <div className="modal-actions">
               <div>
-                {!isNew&&(
+                {!isNew && (
                   <button
                     type="button"
                     className="btn btn-danger"
-                    onClick={()=>onDelete(form.id)}
+                    onClick={() => onDelete(form.id)}
                   >
                     Delete task
                   </button>
@@ -1045,11 +1324,7 @@
                 >
                   Cancel
                 </button>
-
-                <button
-                  type="submit"
-                  className="btn btn-primary"
-                >
+                <button type="submit" className="btn btn-primary">
                   Save task
                 </button>
               </div>
@@ -1070,16 +1345,14 @@
         <article
           className="task-card"
           draggable
-          onClick={()=>onOpen(task)}
-          onDragStart={event=>
-            onDragStart(event,task.id)
-          }
+          onClick={() => onOpen(task)}
+          onDragStart={event => onDragStart(event, task.id)}
           onDragEnd={onDragEnd}
         >
           <button
             className="card-delete"
             aria-label={`Delete ${task.title}`}
-            onClick={event=>{
+            onClick={event => {
               event.stopPropagation();
               onDelete(task.id);
             }}
@@ -1095,27 +1368,22 @@
             >
               {task.priority}
             </span>
-
-            {task.project&&(
-              <span className="pill">
-                {task.project}
-              </span>
-            )}
+            {task.project && <span className="pill">{task.project}</span>}
           </div>
 
-          {task.source&&(
+          {task.source && (
             <p className="card-line">
               <strong>From:</strong> {task.source}
             </p>
           )}
 
-          {task.deadline&&(
+          {task.deadline && (
             <p className="card-line">
               <strong>Due:</strong> {task.deadline}
             </p>
           )}
 
-          {task.nextAction&&(
+          {task.nextAction && (
             <p className="card-line">
               <strong>Next:</strong> {task.nextAction}
             </p>
@@ -1138,34 +1406,24 @@
     }) {
       return (
         <section
-          className={`column${isOver?" drag-over":""}`}
-          onDragOver={event=>
-            onDragOver(event,column.id)
-          }
-          onDrop={event=>onDrop(event,column.id)}
+          className={`column${isOver ? " drag-over" : ""}`}
+          onDragOver={event => onDragOver(event, column.id)}
+          onDrop={event => onDrop(event, column.id)}
         >
           <div className="column-header">
             <div className="column-title">
               <span
                 className="column-dot"
-                style={{background:column.color}}
-              />
+                style={{ background: column.color }}
+              ></span>
               {column.title}
             </div>
-
-            <span className="column-count">
-              {tasks.length}
-            </span>
+            <span className="column-count">{tasks.length}</span>
           </div>
 
           <div className="card-list">
-            {!tasks.length&&(
-              <div className="empty">
-                No tasks here
-              </div>
-            )}
-
-            {tasks.map(task=>(
+            {!tasks.length && <div className="empty">No tasks here</div>}
+            {tasks.map(task => (
               <TaskCard
                 key={task.id}
                 task={task}
@@ -1179,7 +1437,7 @@
 
           <button
             className="add-task"
-            onClick={()=>onAdd(column.id)}
+            onClick={() => onAdd(column.id)}
           >
             + Add task
           </button>
@@ -1187,67 +1445,55 @@
       );
     }
 
-    function TableView({tasks,onOpen}) {
-      const [search,setSearch]=useState("");
-      const [status,setStatus]=useState("");
-      const [project,setProject]=useState("");
-      const [priority,setPriority]=useState("");
-      const [dateFrom,setDateFrom]=useState("");
-      const [dateTo,setDateTo]=useState("");
-      const [unfinishedOnly,setUnfinishedOnly]=useState(false);
-      const [feedbackOnly,setFeedbackOnly]=useState(false);
-      const [sortBy,setSortBy]=useState("updatedAt");
-      const [sortDirection,setSortDirection]=useState("desc");
+    function TableView({ tasks, onOpen }) {
+      const [search, setSearch] = useState("");
+      const [status, setStatus] = useState("");
+      const [project, setProject] = useState("");
+      const [priority, setPriority] = useState("");
+      const [dateFrom, setDateFrom] = useState("");
+      const [dateTo, setDateTo] = useState("");
+      const [unfinishedOnly, setUnfinishedOnly] = useState(false);
+      const [feedbackOnly, setFeedbackOnly] = useState(false);
+      const [sortBy, setSortBy] = useState("updatedAt");
+      const [sortDirection, setSortDirection] = useState("desc");
 
-      const projects=useMemo(
-        ()=>[
-          ...new Set(
-            tasks
-              .map(task=>task.project.trim())
-              .filter(Boolean)
-          )
-        ].sort((a,b)=>a.localeCompare(b)),
+      const projects = useMemo(
+        () =>
+          [...new Set(
+            tasks.map(task => task.project.trim()).filter(Boolean)
+          )].sort((a, b) => a.localeCompare(b)),
         [tasks]
       );
 
-      const filteredTasks=useMemo(()=>{
-        const keyword=search.trim().toLowerCase();
-        const priorityOrder={
-          Low:1,
-          Medium:2,
-          High:3
-        };
-
-        const statusOrder=Object.fromEntries(
-          COLUMNS.map((column,index)=>[
-            column.id,
-            index
-          ])
+      const filteredTasks = useMemo(() => {
+        const keyword = search.trim().toLowerCase();
+        const priorityOrder = { Low: 1, Medium: 2, High: 3 };
+        const statusOrder = Object.fromEntries(
+          COLUMNS.map((column, index) => [column.id, index])
         );
 
-        const sortValue=task=>{
-          if(sortBy==="createdAt") {
-            return createdDate(task)?.getTime()||0;
+        const valueForSort = task => {
+          if (sortBy === "createdAt") {
+            return createdDate(task)?.getTime() || 0;
           }
-
-          if(sortBy==="deadline") {
-            return toDate(task.deadline)?.getTime()||0;
+          if (sortBy === "deadline") {
+            return toDate(task.deadline)?.getTime() || 0;
           }
-
-          if(sortBy==="updatedAt") {
-            return toDate(task.updatedAt)?.getTime()||0;
+          if (sortBy === "updatedAt") {
+            return toDate(task.updatedAt)?.getTime() || 0;
           }
-
-          if(sortBy==="status") {
-            return statusOrder[task.status]??99;
+          if (sortBy === "status") {
+            return statusOrder[task.status] ?? 99;
           }
-
-          return priorityOrder[task.priority]||0;
+          if (sortBy === "priority") {
+            return priorityOrder[task.priority] || 0;
+          }
+          return 0;
         };
 
         return tasks
-          .filter(task=>{
-            const searchable=[
+          .filter(task => {
+            const searchable = [
               task.title,
               task.project,
               task.source,
@@ -1259,57 +1505,36 @@
               task.links
             ].join(" ").toLowerCase();
 
-            const created=dateKey(createdDate(task));
+            const created = dateKey(createdDate(task));
 
-            if(keyword&&!searchable.includes(keyword)) {
-              return false;
-            }
-
-            if(status&&task.status!==status) {
-              return false;
-            }
-
-            if(project&&task.project!==project) {
-              return false;
-            }
-
-            if(priority&&task.priority!==priority) {
-              return false;
-            }
-
-            if(dateFrom&&(!created||created<dateFrom)) {
-              return false;
-            }
-
-            if(dateTo&&(!created||created>dateTo)) {
-              return false;
-            }
-
-            if(
-              unfinishedOnly&&
-              ["done","archived"].includes(task.status)
-            ) {
-              return false;
-            }
-
-            if(feedbackOnly&&task.status!=="feedback") {
-              return false;
-            }
+            if (keyword && !searchable.includes(keyword)) return false;
+            if (status && task.status !== status) return false;
+            if (project && task.project !== project) return false;
+            if (priority && task.priority !== priority) return false;
+            if (dateFrom && (!created || created < dateFrom)) return false;
+            if (dateTo && (!created || created > dateTo)) return false;
+            if (
+              unfinishedOnly &&
+              ["done", "archived"].includes(task.status)
+            ) return false;
+            if (feedbackOnly && task.status !== "feedback") return false;
 
             return true;
           })
-          .sort((a,b)=>{
-            const difference=
-              sortValue(a)-sortValue(b);
+          .sort((a, b) => {
+            const first = valueForSort(a);
+            const second = valueForSort(b);
+            const difference =
+              typeof first === "string"
+                ? first.localeCompare(second)
+                : first - second;
 
             return (
-              (sortDirection==="asc"
-                ?difference
-                :-difference)||
+              (sortDirection === "asc" ? difference : -difference) ||
               a.title.localeCompare(b.title)
             );
           });
-      },[
+      }, [
         tasks,
         search,
         status,
@@ -1323,8 +1548,8 @@
         sortDirection
       ]);
 
-      const openFromKeyboard=(event,task)=>{
-        if(event.key==="Enter"||event.key===" ") {
+      const openFromKeyboard = (event, task) => {
+        if (event.key === "Enter" || event.key === " ") {
           event.preventDefault();
           onOpen(task);
         }
@@ -1334,39 +1559,25 @@
         <main className="table-view">
           <div className="filters">
             <div className="filter-field">
-              <label htmlFor="tableSearch">
-                Search keyword
-              </label>
-
+              <label htmlFor="tableSearch">Search keyword</label>
               <input
                 id="tableSearch"
                 value={search}
-                onChange={event=>
-                  setSearch(event.target.value)
-                }
+                onChange={event => setSearch(event.target.value)}
                 placeholder="Search titles, notes, feedback, results…"
               />
             </div>
 
             <div className="filter-field">
-              <label htmlFor="statusFilter">
-                Status
-              </label>
-
+              <label htmlFor="statusFilter">Status</label>
               <select
                 id="statusFilter"
                 value={status}
-                onChange={event=>
-                  setStatus(event.target.value)
-                }
+                onChange={event => setStatus(event.target.value)}
               >
                 <option value="">All statuses</option>
-
-                {COLUMNS.map(column=>(
-                  <option
-                    key={column.id}
-                    value={column.id}
-                  >
+                {COLUMNS.map(column => (
+                  <option key={column.id} value={column.id}>
                     {column.title}
                   </option>
                 ))}
@@ -1374,77 +1585,51 @@
             </div>
 
             <div className="filter-field">
-              <label htmlFor="projectFilter">
-                Project / Category
-              </label>
-
+              <label htmlFor="projectFilter">Project / Category</label>
               <select
                 id="projectFilter"
                 value={project}
-                onChange={event=>
-                  setProject(event.target.value)
-                }
+                onChange={event => setProject(event.target.value)}
               >
                 <option value="">All projects</option>
-
-                {projects.map(item=>(
-                  <option key={item} value={item}>
-                    {item}
-                  </option>
+                {projects.map(item => (
+                  <option key={item} value={item}>{item}</option>
                 ))}
               </select>
             </div>
 
             <div className="filter-field">
-              <label htmlFor="priorityFilter">
-                Priority
-              </label>
-
+              <label htmlFor="priorityFilter">Priority</label>
               <select
                 id="priorityFilter"
                 value={priority}
-                onChange={event=>
-                  setPriority(event.target.value)
-                }
+                onChange={event => setPriority(event.target.value)}
               >
                 <option value="">All priorities</option>
-
-                {PRIORITIES.map(item=>(
-                  <option key={item}>
-                    {item}
-                  </option>
+                {PRIORITIES.map(item => (
+                  <option key={item}>{item}</option>
                 ))}
               </select>
             </div>
 
             <div className="date-filters">
               <div className="filter-field">
-                <label htmlFor="dateFrom">
-                  Created from
-                </label>
-
+                <label htmlFor="dateFrom">Created from</label>
                 <input
                   id="dateFrom"
                   type="date"
                   value={dateFrom}
-                  onChange={event=>
-                    setDateFrom(event.target.value)
-                  }
+                  onChange={event => setDateFrom(event.target.value)}
                 />
               </div>
 
               <div className="filter-field">
-                <label htmlFor="dateTo">
-                  Created to
-                </label>
-
+                <label htmlFor="dateTo">Created to</label>
                 <input
                   id="dateTo"
                   type="date"
                   value={dateTo}
-                  onChange={event=>
-                    setDateTo(event.target.value)
-                  }
+                  onChange={event => setDateTo(event.target.value)}
                 />
               </div>
             </div>
@@ -1454,10 +1639,8 @@
                 <input
                   type="checkbox"
                   checked={unfinishedOnly}
-                  onChange={event=>
-                    setUnfinishedOnly(
-                      event.target.checked
-                    )
+                  onChange={event =>
+                    setUnfinishedOnly(event.target.checked)
                   }
                 />
                 Show only unfinished tasks
@@ -1467,10 +1650,8 @@
                 <input
                   type="checkbox"
                   checked={feedbackOnly}
-                  onChange={event=>
-                    setFeedbackOnly(
-                      event.target.checked
-                    )
+                  onChange={event =>
+                    setFeedbackOnly(event.target.checked)
                   }
                 />
                 Show only tasks waiting for feedback
@@ -1479,53 +1660,35 @@
 
             <div className="sort-controls">
               <div className="filter-field">
-                <label htmlFor="sortBy">
-                  Sort by
-                </label>
-
+                <label htmlFor="sortBy">Sort by</label>
                 <select
                   id="sortBy"
                   value={sortBy}
-                  onChange={event=>
-                    setSortBy(event.target.value)
-                  }
+                  onChange={event => setSortBy(event.target.value)}
                 >
-                  <option value="createdAt">
-                    Created date
-                  </option>
-                  <option value="deadline">
-                    Due date
-                  </option>
-                  <option value="updatedAt">
-                    Last updated
-                  </option>
-                  <option value="status">
-                    Status
-                  </option>
-                  <option value="priority">
-                    Priority
-                  </option>
+                  <option value="createdAt">Created date</option>
+                  <option value="deadline">Due date</option>
+                  <option value="updatedAt">Last updated</option>
+                  <option value="status">Status</option>
+                  <option value="priority">Priority</option>
                 </select>
               </div>
 
               <button
                 className="btn btn-secondary sort-direction"
-                onClick={()=>
-                  setSortDirection(current=>
-                    current==="asc"?"desc":"asc"
+                onClick={() =>
+                  setSortDirection(current =>
+                    current === "asc" ? "desc" : "asc"
                   )
                 }
               >
-                {sortDirection==="asc"
-                  ?"Ascending"
-                  :"Descending"}
+                {sortDirection === "asc" ? "Ascending" : "Descending"}
               </button>
             </div>
           </div>
 
           <p className="results-summary">
-            Showing {filteredTasks.length} of{" "}
-            {tasks.length} tasks
+            Showing {filteredTasks.length} of {tasks.length} tasks
           </p>
 
           <div className="task-table-wrap">
@@ -1545,27 +1708,19 @@
               </thead>
 
               <tbody>
-                {filteredTasks.map(task=>(
+                {filteredTasks.map(task => (
                   <tr
                     key={task.id}
                     tabIndex="0"
-                    onClick={()=>onOpen(task)}
-                    onKeyDown={event=>
-                      openFromKeyboard(event,task)
+                    onClick={() => onOpen(task)}
+                    onKeyDown={event =>
+                      openFromKeyboard(event, task)
                     }
                   >
-                    <td className="table-title">
-                      {task.title}
-                    </td>
-                    <td>
-                      {statusTitle(task.status)}
-                    </td>
-                    <td>
-                      {task.project||"—"}
-                    </td>
-                    <td>
-                      {task.source||"—"}
-                    </td>
+                    <td className="table-title">{task.title}</td>
+                    <td>{statusTitle(task.status)}</td>
+                    <td>{task.project || "—"}</td>
+                    <td>{task.source || "—"}</td>
                     <td>
                       <span
                         className={`pill priority-${task.priority.toLowerCase()}`}
@@ -1573,18 +1728,12 @@
                         {task.priority}
                       </span>
                     </td>
-                    <td>
-                      {formatDate(createdDate(task))}
-                    </td>
-                    <td>
-                      {formatDate(task.deadline)}
-                    </td>
-                    <td>
-                      {formatDate(task.updatedAt,true)}
-                    </td>
+                    <td>{formatDate(createdDate(task))}</td>
+                    <td>{formatDate(task.deadline)}</td>
+                    <td>{formatDate(task.updatedAt, true)}</td>
                     <td>
                       <span className="table-summary">
-                        {task.finalResult||"—"}
+                        {task.finalResult || "—"}
                       </span>
                     </td>
                   </tr>
@@ -1594,14 +1743,14 @@
           </div>
 
           <div className="mobile-task-list">
-            {filteredTasks.map(task=>(
+            {filteredTasks.map(task => (
               <article
                 key={task.id}
                 className="mobile-task-card"
                 tabIndex="0"
-                onClick={()=>onOpen(task)}
-                onKeyDown={event=>
-                  openFromKeyboard(event,task)
+                onClick={() => onOpen(task)}
+                onKeyDown={event =>
+                  openFromKeyboard(event, task)
                 }
               >
                 <h3>{task.title}</h3>
@@ -1610,43 +1759,34 @@
                   <span className="pill">
                     {statusTitle(task.status)}
                   </span>
-
                   <span
                     className={`pill priority-${task.priority.toLowerCase()}`}
                   >
                     {task.priority}
                   </span>
-
-                  {task.project&&(
-                    <span className="pill">
-                      {task.project}
-                    </span>
+                  {task.project && (
+                    <span className="pill">{task.project}</span>
                   )}
                 </div>
 
-                {task.source&&(
-                  <p>
-                    <strong>From:</strong>{" "}
-                    {task.source}
-                  </p>
+                {task.source && (
+                  <p><strong>From:</strong> {task.source}</p>
                 )}
 
                 <p>
                   <strong>Created:</strong>{" "}
                   {formatDate(createdDate(task))} ·{" "}
-                  <strong>Due:</strong>{" "}
-                  {formatDate(task.deadline)}
+                  <strong>Due:</strong> {formatDate(task.deadline)}
                 </p>
 
                 <p>
                   <strong>Updated:</strong>{" "}
-                  {formatDate(task.updatedAt,true)}
+                  {formatDate(task.updatedAt, true)}
                 </p>
 
-                {task.finalResult&&(
+                {task.finalResult && (
                   <p>
-                    <strong>Result:</strong>{" "}
-                    {task.finalResult}
+                    <strong>Result:</strong> {task.finalResult}
                   </p>
                 )}
               </article>
@@ -1657,53 +1797,43 @@
     }
 
     function App() {
-      const [tasks,setTasks]=useState([]);
-      const [editing,setEditing]=useState(null);
-      const [isNew,setIsNew]=useState(false);
-      const [dragOver,setDragOver]=useState(null);
-      const [services,setServices]=useState(
-        window.firebaseServices||null
+      const [tasks, setTasks] = useState([]);
+      const [editing, setEditing] = useState(null);
+      const [isNew, setIsNew] = useState(false);
+      const [dragOver, setDragOver] = useState(null);
+      const [services, setServices] = useState(
+        window.firebaseServices || null
       );
-      const [user,setUser]=useState(null);
-      const [authReady,setAuthReady]=useState(false);
-      const [remoteReady,setRemoteReady]=useState(false);
-      const [syncStatus,setSyncStatus]=useState(
-        "Not signed in"
-      );
-      const [message,setMessage]=useState("");
-      const [localTasks,setLocalTasks]=useState(
-        loadLocalTasks
-      );
-      const [view,setView]=useState("kanban");
-      const draggedId=useRef(null);
+      const [user, setUser] = useState(null);
+      const [authReady, setAuthReady] = useState(false);
+      const [remoteReady, setRemoteReady] = useState(false);
+      const [syncStatus, setSyncStatus] = useState("Not signed in");
+      const [message, setMessage] = useState("");
+      const [localTasks, setLocalTasks] = useState(loadLocalTasks);
+      const [view, setView] = useState("kanban");
+      const [aiSettings, setAISettings] = useState(loadAISettings);
+      const [showAISettings, setShowAISettings] = useState(false);
+      const [quickEntryStart, setQuickEntryStart] = useState(false);
+      const draggedId = useRef(null);
 
-      useEffect(()=>{
-        if(window.firebaseServices) {
+      useEffect(() => {
+        if (window.firebaseServices) {
           setServices(window.firebaseServices);
           return;
         }
 
-        const ready=()=>{
+        const ready = () =>
           setServices(window.firebaseServices);
-        };
 
-        window.addEventListener(
-          "firebase-ready",
-          ready
-        );
+        window.addEventListener("firebase-ready", ready);
+        return () =>
+          window.removeEventListener("firebase-ready", ready);
+      }, []);
 
-        return ()=>{
-          window.removeEventListener(
-            "firebase-ready",
-            ready
-          );
-        };
-      },[]);
+      useEffect(() => {
+        if (!services) return;
 
-      useEffect(()=>{
-        if(!services) return;
-
-        if(!services.configured) {
+        if (!services.configured) {
           setAuthReady(true);
           setSyncStatus("Not signed in");
           return;
@@ -1711,16 +1841,13 @@
 
         return services.onAuthStateChanged(
           services.auth,
-          nextUser=>{
+          nextUser => {
             setUser(nextUser);
             setAuthReady(true);
             setMessage("");
           },
-          error=>{
-            console.error(
-              "Authentication listener failed",
-              error
-            );
+          error => {
+            console.error("Authentication listener failed", error);
             setAuthReady(true);
             setSyncStatus("Sync failed");
             setMessage(
@@ -1728,74 +1855,64 @@
             );
           }
         );
-      },[services]);
+      }, [services]);
 
-      useEffect(()=>{
+      useEffect(() => {
         setRemoteReady(false);
 
-        if(!services?.configured||!user) {
+        if (!services?.configured || !user) {
           setTasks([]);
           setSyncStatus("Not signed in");
           return;
         }
 
-        const cached=loadCache(user.uid);
-
-        if(cached.length) {
-          setTasks(cached);
-        }
+        const cached = loadCache(user.uid);
+        if (cached.length) setTasks(cached);
 
         setSyncStatus("Syncing");
 
-        const tasksCollection=services.collection(
+        const tasksCollection = services.collection(
           services.db,
           "users",
           user.uid,
           "tasks"
         );
 
-        const unsubscribe=services.onSnapshot(
+        const unsubscribe = services.onSnapshot(
           tasksCollection,
-          {includeMetadataChanges:true},
-          snapshot=>{
-            const nextTasks=snapshot.docs
-              .map(item=>
-                normalizeTask({
-                  ...item.data(),
-                  id:item.id
-                })
+          { includeMetadataChanges: true },
+          snapshot => {
+            const nextTasks = snapshot.docs
+              .map(item =>
+                normalizeTask({ ...item.data(), id: item.id })
               )
-              .sort((a,b)=>{
-                const columnDifference=
+              .sort((a, b) => {
+                const columnDifference =
                   COLUMNS.findIndex(
-                    column=>column.id===a.status
-                  )-
+                    column => column.id === a.status
+                  ) -
                   COLUMNS.findIndex(
-                    column=>column.id===b.status
+                    column => column.id === b.status
                   );
 
                 return (
-                  columnDifference||
-                  a.order-b.order||
+                  columnDifference ||
+                  a.order - b.order ||
                   a.title.localeCompare(b.title)
                 );
               });
 
             setTasks(nextTasks);
-            saveCache(user.uid,nextTasks);
+            saveCache(user.uid, nextTasks);
             setRemoteReady(true);
-
             setSyncStatus(
               snapshot.metadata.hasPendingWrites
-                ?"Syncing"
-                :"Synced"
+                ? "Syncing"
+                : "Synced"
             );
           },
-          error=>{
-            console.error(
-              "Task sync failed",
-              error
-            );
+          error => {
+            console.error("Task sync failed", error);
             setRemoteReady(true);
             setSyncStatus("Sync failed");
             setMessage(
@@ -1805,214 +1922,180 @@
         );
 
         return unsubscribe;
-      },[services,user]);
+      }, [services, user]);
 
-      const tasksCollection=()=>services.collection(
-        services.db,
-        "users",
-        user.uid,
-        "tasks"
-      );
+      const tasksCollection = () =>
+        services.collection(
+          services.db,
+          "users",
+          user.uid,
+          "tasks"
+        );
 
-      async function writeTask(
+      const writeTask = async (
         task,
-        isNewRecord=false
-      ) {
-        if(!services?.configured||!user) {
-          return false;
-        }
+        isNewRecord = false
+      ) => {
+        if (!services?.configured || !user) return false;
 
         setSyncStatus("Syncing");
         setMessage("");
 
         try {
           await services.setDoc(
-            services.doc(
-              tasksCollection(),
-              task.id
-            ),
+            services.doc(tasksCollection(), task.id),
             taskForFirestore(
               task,
               services.serverTimestamp(),
               isNewRecord
             ),
-            {merge:true}
+            { merge: true }
           );
-
           return true;
-        } catch(error) {
-          console.error(
-            "Could not save task",
-            error
-          );
+        } catch (error) {
+          console.error("Could not save task", error);
           setSyncStatus("Sync failed");
           setMessage(
             "This task could not be saved. Check your connection and try again."
           );
           return false;
         }
-      }
+      };
 
-      async function signIn() {
-        if(!services?.configured) return;
-
+      const signIn = async () => {
+        if (!services?.configured) return;
         setMessage("");
 
         try {
-          const provider=
+          const provider =
             new services.GoogleAuthProvider();
-
           provider.setCustomParameters({
-            prompt:"select_account"
+            prompt: "select_account"
           });
-
           await services.signInWithPopup(
             services.auth,
             provider
           );
-        } catch(error) {
-          console.error(
-            "Google sign-in failed",
-            error
-          );
-
+        } catch (error) {
+          console.error("Google sign-in failed", error);
           setMessage(
-            error.code==="auth/popup-blocked"
-              ?"The sign-in window was blocked. Allow pop-ups for this page and try again."
-              :"Google sign-in failed. Check the Firebase authorized domains and try again."
+            error.code === "auth/popup-blocked"
+              ? "The sign-in window was blocked. Allow pop-ups for this page and try again."
+              : "Google sign-in failed. Check the Firebase authorized domains and try again."
           );
         }
-      }
+      };
 
-      async function logOut() {
+      const logOut = async () => {
         setSyncStatus("Syncing");
 
         try {
-          await services.signOut(
-            services.auth
-          );
-        } catch(error) {
-          console.error(
-            "Sign out failed",
-            error
-          );
+          await services.signOut(services.auth);
+        } catch (error) {
+          console.error("Sign out failed", error);
           setSyncStatus("Sync failed");
           setMessage(
             "Could not sign out. Please try again."
           );
         }
-      }
+      };
 
-      const openNew=status=>{
+      const openNew = (status, smart = false) => {
         setEditing(blankTask(status));
         setIsNew(true);
+        setQuickEntryStart(smart);
       };
 
-      const openExisting=task=>{
-        setEditing({...task});
+      const openExisting = task => {
+        setEditing({ ...task });
         setIsNew(false);
+        setQuickEntryStart(false);
       };
 
-      async function saveTask(task) {
-        const previous=tasks.find(
-          item=>item.id===task.id
+      const saveTask = async task => {
+        const previous = tasks.find(
+          item => item.id === task.id
         );
 
-        if(
-          isNew||
-          (previous&&previous.status!==task.status)
+        if (
+          isNew ||
+          (previous && previous.status !== task.status)
         ) {
-          const columnOrders=tasks
-            .filter(
-              item=>item.status===task.status
-            )
-            .map(item=>item.order||0);
+          const columnOrders = tasks
+            .filter(item => item.status === task.status)
+            .map(item => item.order || 0);
 
-          task.order=
+          task.order =
             (columnOrders.length
-              ?Math.max(...columnOrders)
-              :0)+1;
+              ? Math.max(...columnOrders)
+              : 0) + 1;
         }
 
-        if(await writeTask(task,isNew)) {
+        if (await writeTask(task, isNew)) {
           setEditing(null);
         }
-      }
+      };
 
-      async function deleteTask(id) {
-        if(
-          !window.confirm(
-            "Delete this task? This cannot be undone."
-          )
-        ) {
-          return;
-        }
+      const deleteTask = async id => {
+        if (!window.confirm(
+          "Delete this task? This cannot be undone."
+        )) return;
 
         setSyncStatus("Syncing");
         setMessage("");
 
         try {
           await services.deleteDoc(
-            services.doc(
-              tasksCollection(),
-              id
-            )
+            services.doc(tasksCollection(), id)
           );
           setEditing(null);
-        } catch(error) {
-          console.error(
-            "Could not delete task",
-            error
-          );
+        } catch (error) {
+          console.error("Could not delete task", error);
           setSyncStatus("Sync failed");
           setMessage(
             "This task could not be deleted. Check your connection and try again."
           );
         }
-      }
-
-      const startDrag=(event,id)=>{
-        draggedId.current=id;
-        event.currentTarget.classList.add(
-          "dragging"
-        );
-        event.dataTransfer.effectAllowed="move";
       };
 
-      const endDrag=event=>{
-        event.currentTarget.classList.remove(
-          "dragging"
-        );
-        draggedId.current=null;
+      const startDrag = (event, id) => {
+        draggedId.current = id;
+        event.currentTarget.classList.add("dragging");
+        event.dataTransfer.effectAllowed = "move";
+      };
+
+      const endDrag = event => {
+        event.currentTarget.classList.remove("dragging");
+        draggedId.current = null;
         setDragOver(null);
       };
 
-      async function drop(event,status) {
+      const drop = async (event, status) => {
         event.preventDefault();
 
-        const task=tasks.find(
-          item=>item.id===draggedId.current
+        const task = tasks.find(
+          item => item.id === draggedId.current
         );
 
-        if(task&&task.status!==status) {
-          const columnOrders=tasks
-            .filter(item=>item.status===status)
-            .map(item=>item.order||0);
+        if (task && task.status !== status) {
+          const columnOrders = tasks
+            .filter(item => item.status === status)
+            .map(item => item.order || 0);
 
-          const movedTask={
+          const movedTask = {
             ...task,
             status,
             order:
               (columnOrders.length
-                ?Math.max(...columnOrders)
-                :0)+1
+                ? Math.max(...columnOrders)
+                : 0) + 1
           };
 
-          setTasks(current=>
-            current.map(item=>
-              item.id===movedTask.id
-                ?movedTask
-                :item
+          setTasks(current =>
+            current.map(item =>
+              item.id === movedTask.id
+                ? movedTask
+                : item
             )
           );
 
@@ -2020,33 +2103,31 @@
         }
 
         setDragOver(null);
-      }
+      };
 
-      async function importLocalTasks() {
-        if(!localTasks.length||!user) return;
+      const importLocalTasks = async () => {
+        if (!localTasks.length || !user) return;
 
         setSyncStatus("Syncing");
         setMessage("");
 
         try {
-          for(
-            let start=0;
-            start<localTasks.length;
-            start+=400
+          for (
+            let start = 0;
+            start < localTasks.length;
+            start += 400
           ) {
-            const batch=
-              services.writeBatch(
-                services.db
-              );
+            const batch =
+              services.writeBatch(services.db);
 
             localTasks
-              .slice(start,start+400)
-              .forEach((task,index)=>{
-                const prepared={
+              .slice(start, start + 400)
+              .forEach((task, index) => {
+                const prepared = {
                   ...normalizeTask(task),
                   order:
-                    task.order||
-                    start+index+1
+                    task.order ||
+                    start + index + 1
                 };
 
                 batch.set(
@@ -2059,21 +2140,17 @@
                     services.serverTimestamp(),
                     true
                   ),
-                  {merge:true}
+                  { merge: true }
                 );
               });
 
             await batch.commit();
           }
 
-          localStorage.removeItem(
-            STORAGE_KEY
-          );
-          localStorage.removeItem(
-            LEGACY_KEY
-          );
+          localStorage.removeItem(STORAGE_KEY);
+          localStorage.removeItem(LEGACY_KEY);
           setLocalTasks([]);
-        } catch(error) {
+        } catch (error) {
           console.error(
             "Local task import failed",
             error
@@ -2083,29 +2160,27 @@
             "Local tasks could not be imported. Nothing was removed; please try again."
           );
         }
-      }
+      };
 
-      const activeCount=tasks.filter(
-        task=>
-          !["done","archived"].includes(
-            task.status
-          )
+      const activeCount = tasks.filter(
+        task =>
+          !["done", "archived"].includes(task.status)
       ).length;
 
-      const doneCount=tasks.filter(
-        task=>task.status==="done"
+      const doneCount = tasks.filter(
+        task => task.status === "done"
       ).length;
 
-      const statusClass=
-        syncStatus==="Synced"
-          ?"synced"
-          :syncStatus==="Syncing"
-          ?"syncing"
-          :syncStatus==="Sync failed"
-          ?"failed"
-          :"";
+      const statusClass =
+        syncStatus === "Synced"
+          ? "synced"
+          : syncStatus === "Syncing"
+            ? "syncing"
+            : syncStatus === "Sync failed"
+              ? "failed"
+              : "";
 
-      if(!services||!authReady) {
+      if (!services || !authReady) {
         return (
           <div className="loading-board">
             Starting Daily Work Tracker…
@@ -2119,38 +2194,28 @@
             <div className="brand">
               <h1>Daily Work Tracker</h1>
               <p>
-                Keep the background, progress,
-                feedback, and result of your work
-                in one place.
+                Keep the background, progress, feedback,
+                and result of your work in one place.
               </p>
             </div>
 
             <div className="header-actions">
-              {user&&(
+              {user && (
                 <div className="stats">
                   <span>
-                    <strong>
-                      {activeCount}
-                    </strong>{" "}
-                    active
+                    <strong>{activeCount}</strong> active
                   </span>
-
                   <span>
-                    <strong>
-                      {doneCount}
-                    </strong>{" "}
-                    done
+                    <strong>{doneCount}</strong> done
                   </span>
                 </div>
               )}
 
-              <span
-                className={`sync-status ${statusClass}`}
-              >
+              <span className={`sync-status ${statusClass}`}>
                 {syncStatus}
               </span>
 
-              {user?(
+              {user ? (
                 <div className="account-area">
                   <span
                     className="account-email"
@@ -2167,21 +2232,35 @@
                   </button>
 
                   <button
-                    className="btn btn-primary"
-                    onClick={()=>
-                      openNew("new")
+                    className="btn btn-secondary"
+                    onClick={() =>
+                      setShowAISettings(true)
                     }
+                  >
+                    AI Settings
+                  </button>
+
+                  <button
+                    className="btn btn-secondary"
+                    onClick={() =>
+                      openNew("new", true)
+                    }
+                  >
+                    Smart Quick Entry
+                  </button>
+
+                  <button
+                    className="btn btn-primary"
+                    onClick={() => openNew("new")}
                   >
                     + New task
                   </button>
                 </div>
-              ):(
+              ) : (
                 <button
                   className="btn btn-primary"
                   onClick={signIn}
-                  disabled={
-                    !services.configured
-                  }
+                  disabled={!services.configured}
                 >
                   Sign in with Google
                 </button>
@@ -2189,61 +2268,53 @@
             </div>
           </header>
 
-          {!user?(
+          {!user ? (
             <main className="welcome-wrap">
               <div className="welcome-card">
                 <h2>
-                  Your work, available on
-                  every device
+                  Your work, available on every device
                 </h2>
 
                 <p>
-                  Sign in with the same Google
-                  account on your computer and
-                  phone. Your tasks stay private
-                  and sync automatically.
+                  Sign in with the same Google account on
+                  your computer and phone. Your tasks will
+                  stay private to your account and sync
+                  automatically.
                 </p>
 
                 <button
                   className="btn btn-primary"
                   onClick={signIn}
-                  disabled={
-                    !services.configured
-                  }
+                  disabled={!services.configured}
                 >
                   Sign in with Google
                 </button>
 
-                {!services.configured&&(
+                {!services.configured && (
                   <div className="setup-note">
-                    Firebase is not configured
-                    yet. Replace the placeholder
-                    values in{" "}
-                    <strong>
-                      firebaseConfig
-                    </strong>
-                    , then publish the page again.
+                    Firebase is not configured yet. Replace
+                    the placeholder values in{" "}
+                    <strong>firebaseConfig</strong>, then
+                    publish the page again.
                   </div>
                 )}
 
-                {message&&(
+                {message && (
                   <div className="error-note">
                     {message}
                   </div>
                 )}
               </div>
             </main>
-          ):(
+          ) : (
             <>
-              {localTasks.length>0&&(
+              {localTasks.length > 0 && (
                 <div className="import-banner">
                   <span>
                     {localTasks.length} task
-                    {localTasks.length===1
-                      ?""
-                      :"s"}{" "}
-                    from the old local-only app
-                    were found on this device.
+                    {localTasks.length === 1 ? "" : "s"} from
+                    the old local-only app were found on this
+                    device.
                   </span>
 
                   <button
@@ -2255,17 +2326,17 @@
                 </div>
               )}
 
-              {message&&(
+              {message && (
                 <div className="import-banner error-note">
                   {message}
                 </div>
               )}
 
-              {!remoteReady&&!tasks.length?(
+              {!remoteReady && !tasks.length ? (
                 <div className="loading-board">
                   Syncing your tasks…
                 </div>
-              ):(
+              ) : (
                 <>
                   <div className="view-toolbar">
                     <div
@@ -2273,59 +2344,48 @@
                       aria-label="Choose task view"
                     >
                       <button
-                        className={`view-button${view==="kanban"?" active":""}`}
-                        onClick={()=>
-                          setView("kanban")
-                        }
+                        className={`view-button${view === "kanban" ? " active" : ""}`}
+                        onClick={() => setView("kanban")}
                       >
                         Kanban View
                       </button>
 
                       <button
-                        className={`view-button${view==="table"?" active":""}`}
-                        onClick={()=>
-                          setView("table")
-                        }
+                        className={`view-button${view === "table" ? " active" : ""}`}
+                        onClick={() => setView("table")}
                       >
                         Table View
                       </button>
                     </div>
                   </div>
 
-                  {view==="kanban"?(
+                  {view === "kanban" ? (
                     <main className="board">
-                      {COLUMNS.map(column=>(
+                      {COLUMNS.map(column => (
                         <Column
                           key={column.id}
                           column={column}
                           tasks={tasks.filter(
-                            task=>
-                              task.status===
-                              column.id
+                            task =>
+                              task.status === column.id
                           )}
                           onAdd={openNew}
                           onOpen={openExisting}
                           onDelete={deleteTask}
-                          onDragStart={
-                            startDrag
-                          }
+                          onDragStart={startDrag}
                           onDragEnd={endDrag}
-                          onDragOver={(
-                            event,
-                            status
-                          )=>{
+                          onDragOver={(event, status) => {
                             event.preventDefault();
                             setDragOver(status);
                           }}
                           onDrop={drop}
                           isOver={
-                            dragOver===
-                            column.id
+                            dragOver === column.id
                           }
                         />
                       ))}
                     </main>
-                  ):(
+                  ) : (
                     <TableView
                       tasks={tasks}
                       onOpen={openExisting}
@@ -2336,14 +2396,27 @@
             </>
           )}
 
-          {editing&&(
+          {editing && (
             <TaskModal
               task={editing}
               isNew={isNew}
               onSave={saveTask}
               onDelete={deleteTask}
-              onClose={()=>
-                setEditing(null)
+              onClose={() => setEditing(null)}
+              aiSettings={aiSettings}
+              onOpenAISettings={() =>
+                setShowAISettings(true)
+              }
+              quickEntryStart={quickEntryStart}
+            />
+          )}
+
+          {showAISettings && (
+            <AISettingsModal
+              settings={aiSettings}
+              onSave={setAISettings}
+              onClose={() =>
+                setShowAISettings(false)
               }
             />
           )}
@@ -2352,10 +2425,8 @@
     }
 
     ReactDOM
-      .createRoot(
-        document.getElementById("root")
-      )
-      .render(<App/>);
+      .createRoot(document.getElementById("root"))
+      .render(<App />);
   </script>
 </body>
 </html>
