@@ -248,14 +248,16 @@
     .attachments-header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: .75rem; }
     .attachments-header h3 { margin: 0; font-size: .95rem; }
     .attachments-header p { margin: .2rem 0 0; color: var(--muted); font-size: .73rem; }
-    .file-input { display: none; }
     .attachment-message { margin: .65rem 0 0; color: #475467; font-size: .75rem; line-height: 1.4; }
+    .attachment-link-box { margin-bottom: .8rem; padding: .8rem; border: 1px solid #d9dff0; border-radius: 8px; background: #fff; }
+    .attachment-link-box textarea { min-height: 105px; margin-top: .45rem; }
     .attachments-table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 9px; background: #fff; }
-    .attachments-table { width: 100%; min-width: 680px; border-collapse: collapse; }
+    .attachments-table { width: 100%; min-width: 520px; border-collapse: collapse; }
     .attachments-table th { padding: .6rem .65rem; border-bottom: 1px solid var(--border); background: #f8fafc; color: #475467; font-size: .68rem; text-align: left; white-space: nowrap; }
     .attachments-table td { padding: .62rem .65rem; border-bottom: 1px solid #edf0f3; color: #475467; font-size: .74rem; vertical-align: middle; }
     .attachments-table tr:last-child td { border-bottom: 0; }
     .attachment-name { max-width: 260px; color: var(--text); font-weight: 650; word-break: break-word; }
+    .attachment-name a { color: var(--primary); font-weight: 750; text-decoration: underline; }
     .attachment-action { border: 0; background: transparent; color: var(--primary); font-size: .72rem; font-weight: 700; text-decoration: underline; }
     .attachment-action.danger { color: var(--danger); }
     .status-control-row { display: flex; gap: .45rem; align-items: end; }
@@ -329,14 +331,6 @@
       setDoc,
       writeBatch
     } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js";
-    import {
-      deleteObject,
-      getDownloadURL,
-      getStorage,
-      ref as storageRef,
-      uploadBytes
-    } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-storage.js";
-
     const firebaseConfig = {
       apiKey: "AIzaSyCKGbvtSSJxp_0xLFc_gVXnnCDcFYPCYS8",
       authDomain: "daily-work-tracker-rayson.firebaseapp.com",
@@ -358,12 +352,10 @@
         const auth = getAuth(app);
         await setPersistence(auth, browserLocalPersistence);
         const db = getFirestore(app);
-        const storage = getStorage(app);
         window.firebaseServices = {
           configured: true,
           auth,
           db,
-          storage,
           GoogleAuthProvider,
           onAuthStateChanged,
           signInWithPopup,
@@ -374,11 +366,7 @@
           deleteDoc,
           onSnapshot,
           serverTimestamp,
-          writeBatch,
-          storageRef,
-          uploadBytes,
-          getDownloadURL,
-          deleteObject
+          writeBatch
         };
       }
     } catch (error) {
@@ -436,10 +424,7 @@
         id: attachment.id || makeAttachmentId(),
         fileName: attachment.fileName || attachment.name || "Untitled file",
         fileUrl: attachment.fileUrl || attachment.url || "",
-        storagePath: attachment.storagePath || "",
-        fileSize: Number.isFinite(attachment.fileSize) ? attachment.fileSize : 0,
-        contentType: attachment.contentType || "",
-        uploadedAt: attachment.uploadedAt || null
+        uploadedAt: attachment.uploadedAt || attachment.addedAt || null
       };
     }
 
@@ -457,6 +442,29 @@
         unitIndex += 1;
       }
       return `${size >= 10 || unitIndex === 0 ? Math.round(size) : size.toFixed(1)} ${units[unitIndex]}`;
+    }
+
+    function defaultAttachmentName(url) {
+      if (/kdocs\.cn|wps\.cn/i.test(url)) return "WPS附件";
+      if (/feishu\.cn|larksuite\.com/i.test(url)) return "飞书附件";
+      return "云端附件";
+    }
+
+    function parseAttachmentLinks(text) {
+      return String(text || "")
+        .split(/\n+/)
+        .flatMap(line => {
+          const urls = line.match(/https?:\/\/[^\s，,。；;]+/g) || [];
+          return urls.map(url => {
+            const nearbyText = line.replace(url, "").trim().replace(/^[：:\-\s]+|[：:\-\s]+$/g, "");
+            return {
+              id: makeAttachmentId(),
+              fileName: nearbyText || defaultAttachmentName(url),
+              fileUrl: url,
+              uploadedAt: new Date().toISOString()
+            };
+          });
+        });
     }
 
     function normalizeNextActions(items, legacyText = "", keepEmpty = false) {
@@ -886,7 +894,7 @@
       );
     }
 
-    function TaskModal({ task, isNew, onSave, onDelete, onClose, onUploadAttachments, onDeleteAttachment, aiSettings, onOpenAISettings, quickEntryStart }) {
+    function TaskModal({ task, isNew, onSave, onDelete, onClose, onSaveAttachmentRecord, aiSettings, onOpenAISettings, quickEntryStart }) {
       const [form, setForm] = useState(task);
       const [quickText, setQuickText] = useState("");
       const [parsedResult, setParsedResult] = useState(null);
@@ -894,13 +902,14 @@
       const [parseMessage, setParseMessage] = useState("");
       const [parsing, setParsing] = useState(false);
       const [listening, setListening] = useState(false);
-      const [uploading, setUploading] = useState(false);
       const [attachmentMessage, setAttachmentMessage] = useState("");
+      const [showAttachmentInput, setShowAttachmentInput] = useState(false);
+      const [attachmentText, setAttachmentText] = useState("");
+      const [pendingAttachments, setPendingAttachments] = useState([]);
       const [statusMessage, setStatusMessage] = useState("");
       const [statusListening, setStatusListening] = useState(false);
       const [openSections, setOpenSections] = useState({ next: false, feedback: false, process: false, final: false, legacy: false });
       const quickEntryRef = useRef(null);
-      const fileInputRef = useRef(null);
       useEffect(() => {
         const closeOnEscape = event => event.key === "Escape" && onClose();
         window.addEventListener("keydown", closeOnEscape);
@@ -964,41 +973,59 @@
         setParseMessage("Parsed fill was undone.");
       };
 
-      const uploadFiles = async event => {
-        const files = Array.from(event.target.files || []);
-        event.target.value = "";
-        if (!files.length) return;
-        if (!form.title.trim()) {
-          setAttachmentMessage("Please add a task title before uploading files.");
+      const prepareAttachmentLinks = () => {
+        const parsed = parseAttachmentLinks(attachmentText);
+        if (!parsed.length) {
+          setAttachmentMessage("没有识别到链接。请粘贴包含 http:// 或 https:// 的文件链接。");
           return;
         }
-        setUploading(true);
-        setAttachmentMessage("Uploading files…");
+        setPendingAttachments(parsed);
+        setAttachmentMessage("已识别附件链接。你可以先修改文件名，再保存记录。");
+      };
+
+      const updatePendingAttachmentName = (index, value) => {
+        setPendingAttachments(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, fileName: value } : item));
+      };
+
+      const saveAttachmentLinks = async () => {
+        const preparedLinks = pendingAttachments.length ? pendingAttachments : parseAttachmentLinks(attachmentText);
+        const validLinks = preparedLinks.map(normalizeAttachment).filter(item => item.fileUrl);
+        if (!validLinks.length) {
+          setAttachmentMessage("没有可保存的附件链接。");
+          return;
+        }
+        if (!form.title.trim()) {
+          setAttachmentMessage("请先填写任务标题，再保存附件记录。");
+          return;
+        }
         try {
-          const updatedTask = await onUploadAttachments({ ...form, title: form.title.trim() }, files, isNew);
+          const updatedTask = await onSaveAttachmentRecord(
+            { ...form, title: form.title.trim(), attachments: [...(form.attachments || []), ...validLinks] },
+            isNew
+          );
           setForm(updatedTask);
-          setAttachmentMessage(`${files.length} file${files.length === 1 ? "" : "s"} uploaded.`);
+          setAttachmentText("");
+          setPendingAttachments([]);
+          setShowAttachmentInput(false);
+          setAttachmentMessage("附件链接记录已保存。");
         } catch (error) {
-          console.error("File upload failed", error);
-          setAttachmentMessage(`Upload failed: ${error.message}`);
-        } finally {
-          setUploading(false);
+          console.error("Attachment link save failed", error);
+          setAttachmentMessage(`保存失败：${error.message}`);
         }
       };
 
       const deleteAttachment = async attachment => {
-        if (!window.confirm(`Delete "${attachment.fileName}"? This will remove the file from Firebase Storage.`)) return;
-        setUploading(true);
-        setAttachmentMessage("Deleting file…");
+        if (!window.confirm("只会删除这个任务里的附件记录，不会删除云端原文件。确定删除吗？")) return;
         try {
-          const updatedTask = await onDeleteAttachment(form, attachment);
+          const updatedTask = await onSaveAttachmentRecord(
+            { ...form, attachments: (form.attachments || []).filter(item => item.id !== attachment.id) },
+            false
+          );
           setForm(updatedTask);
-          setAttachmentMessage("File deleted.");
+          setAttachmentMessage("附件记录已删除，云端原文件不会被删除。");
         } catch (error) {
-          console.error("File delete failed", error);
-          setAttachmentMessage(`Delete failed: ${error.message}`);
-        } finally {
-          setUploading(false);
+          console.error("Attachment record delete failed", error);
+          setAttachmentMessage(`删除记录失败：${error.message}`);
         }
       };
 
@@ -1211,38 +1238,57 @@
                 <section className="attachments-section">
                   <div className="attachments-header">
                     <div>
-                      <h3>Attachments</h3>
-                      <p>Upload files for this task. File contents are stored in Firebase Storage; only file details are saved with the task.</p>
+                      <h3>附件</h3>
+                      <p>这里只保存云端文件链接记录，不保存文件本体，也不会删除云端原文件。</p>
                     </div>
                     <div>
-                      <input ref={fileInputRef} className="file-input" type="file" multiple onChange={uploadFiles} />
-                      <button type="button" className="btn btn-secondary" onClick={() => fileInputRef.current?.click()} disabled={uploading}>{uploading ? "Working…" : "Upload files"}</button>
+                      <button type="button" className="btn btn-secondary" onClick={() => setShowAttachmentInput(current => !current)}>添加附件链接</button>
                     </div>
                   </div>
+                  {showAttachmentInput && (
+                    <div className="attachment-link-box">
+                      <label htmlFor="attachmentText">粘贴文件链接或包含文件名的整段文字</label>
+                      <textarea id="attachmentText" value={attachmentText} onChange={event => { setAttachmentText(event.target.value); setPendingAttachments([]); }} placeholder={"俄罗斯水槽说明书修改清单.xlsx https://kdocs.cn/xxxx\n老板反馈截图.png https://feishu.cn/xxxx\nhttps://kdocs.cn/xxxx"} />
+                      <div className="quick-actions">
+                        <button type="button" className="btn btn-secondary" onClick={prepareAttachmentLinks}>识别链接</button>
+                        <button type="button" className="btn btn-primary" onClick={saveAttachmentLinks}>保存附件记录</button>
+                        <button type="button" className="btn btn-secondary" onClick={() => { setAttachmentText(""); setPendingAttachments([]); setShowAttachmentInput(false); }}>取消</button>
+                      </div>
+                      {pendingAttachments.length > 0 && (
+                        <div className="structured-table-wrap">
+                          <table className="structured-table">
+                            <thead><tr><th>文件名</th><th>链接</th></tr></thead>
+                            <tbody>
+                              {pendingAttachments.map((attachment, index) => (
+                                <tr key={attachment.id}>
+                                  <td><input value={attachment.fileName} onChange={event => updatePendingAttachmentName(index, event.target.value)} /></td>
+                                  <td><span className="table-summary">{attachment.fileUrl}</span></td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+                  )}
                   <div className="attachments-table-wrap">
                     <table className="attachments-table">
                       <thead>
                         <tr>
-                          <th>File name</th>
-                          <th>Upload time</th>
-                          <th>File size</th>
-                          <th>Open</th>
-                          <th>Download</th>
-                          <th>Delete</th>
+                          <th>文件名</th>
+                          <th>添加时间</th>
+                          <th>删除记录</th>
                         </tr>
                       </thead>
                       <tbody>
                         {attachmentCount(form) ? form.attachments.map(attachment => (
                           <tr key={attachment.id}>
-                            <td className="attachment-name">{attachment.fileName}</td>
+                            <td className="attachment-name"><a href={attachment.fileUrl} target="_blank" rel="noopener noreferrer">{attachment.fileName}</a></td>
                             <td>{formatDate(attachment.uploadedAt, true)}</td>
-                            <td>{formatFileSize(attachment.fileSize)}</td>
-                            <td><button type="button" className="attachment-action" onClick={() => window.open(attachment.fileUrl, "_blank", "noopener")}>Open</button></td>
-                            <td><a className="attachment-action" href={attachment.fileUrl} download={attachment.fileName} target="_blank" rel="noopener noreferrer">Download</a></td>
-                            <td><button type="button" className="attachment-action danger" onClick={() => deleteAttachment(attachment)} disabled={uploading}>Delete</button></td>
+                            <td><button type="button" className="attachment-action danger" onClick={() => deleteAttachment(attachment)}>删除记录</button></td>
                           </tr>
                         )) : (
-                          <tr><td colSpan="6">No files uploaded yet.</td></tr>
+                          <tr><td colSpan="3">还没有附件链接记录。</td></tr>
                         )}
                       </tbody>
                     </table>
@@ -1645,52 +1691,16 @@
         }
       };
 
-      const uploadAttachments = async (task, files, isNewRecord = false) => {
-        if (!services?.configured || !user) throw new Error("Please sign in before uploading files.");
-        setSyncStatus("Syncing");
-        setMessage("");
-        const uploaded = [];
-        for (const file of files) {
-          const uniqueFileName = `${Date.now()}-${Math.random().toString(16).slice(2)}-${safeFileName(file.name)}`;
-          const storagePath = `users/${user.uid}/tasks/${task.id}/${uniqueFileName}`;
-          const fileReference = services.storageRef(services.storage, storagePath);
-          await services.uploadBytes(fileReference, file, { contentType: file.type || "application/octet-stream" });
-          const fileUrl = await services.getDownloadURL(fileReference);
-          uploaded.push({
-            id: makeAttachmentId(),
-            fileName: file.name,
-            fileUrl,
-            storagePath,
-            fileSize: file.size,
-            contentType: file.type || "",
-            uploadedAt: new Date().toISOString()
-          });
-        }
+      const saveAttachmentRecord = async (task, isNewRecord = false) => {
+        if (!services?.configured || !user) throw new Error("Please sign in before saving attachment links.");
         const updatedTask = normalizeTask({
           ...task,
-          attachments: [...(Array.isArray(task.attachments) ? task.attachments : []), ...uploaded]
+          attachments: Array.isArray(task.attachments) ? task.attachments.map(normalizeAttachment) : []
         });
         const saved = await writeTask(updatedTask, isNewRecord);
-        if (!saved) throw new Error("Files uploaded, but task metadata could not be saved. Please try saving the task again.");
+        if (!saved) throw new Error("The attachment record could not be saved. Please check your connection and try again.");
         setEditing(updatedTask);
         if (isNewRecord) setIsNew(false);
-        return updatedTask;
-      };
-
-      const deleteAttachment = async (task, attachment) => {
-        if (!services?.configured || !user) throw new Error("Please sign in before deleting files.");
-        setSyncStatus("Syncing");
-        setMessage("");
-        if (attachment.storagePath) {
-          await services.deleteObject(services.storageRef(services.storage, attachment.storagePath));
-        }
-        const updatedTask = normalizeTask({
-          ...task,
-          attachments: (Array.isArray(task.attachments) ? task.attachments : []).filter(item => item.id !== attachment.id)
-        });
-        const saved = await writeTask(updatedTask, false);
-        if (!saved) throw new Error("The file was deleted, but the task row could not be updated. Please refresh and try again.");
-        setEditing(updatedTask);
         return updatedTask;
       };
 
@@ -1735,14 +1745,6 @@
         setSyncStatus("Syncing");
         setMessage("");
         try {
-          const task = tasks.find(item => item.id === id);
-          if (task?.attachments?.length) {
-            await Promise.allSettled(task.attachments.map(attachment => (
-              attachment.storagePath
-                ? services.deleteObject(services.storageRef(services.storage, attachment.storagePath))
-                : Promise.resolve()
-            )));
-          }
           await services.deleteDoc(services.doc(tasksCollection(), id));
           setEditing(null);
         } catch (error) {
@@ -1871,7 +1873,7 @@
               )}
             </>
           )}
-          {editing && <TaskModal task={editing} isNew={isNew} onSave={saveTask} onDelete={deleteTask} onClose={() => setEditing(null)} onUploadAttachments={uploadAttachments} onDeleteAttachment={deleteAttachment} aiSettings={aiSettings} onOpenAISettings={() => setShowAISettings(true)} quickEntryStart={quickEntryStart} />}
+          {editing && <TaskModal task={editing} isNew={isNew} onSave={saveTask} onDelete={deleteTask} onClose={() => setEditing(null)} onSaveAttachmentRecord={saveAttachmentRecord} aiSettings={aiSettings} onOpenAISettings={() => setShowAISettings(true)} quickEntryStart={quickEntryStart} />}
           {showAISettings && <AISettingsModal settings={aiSettings} onSave={setAISettings} onClose={() => setShowAISettings(false)} />}
         </>
       );
