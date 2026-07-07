@@ -245,6 +245,7 @@
     .preview-item { min-width: 0; color: #475467; font-size: .73rem; line-height: 1.4; word-break: break-word; }
     .preview-item strong { color: var(--text); }
     .attachments-section { grid-column: 1 / -1; padding: 1rem; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-soft); }
+    .collapsible-section.attachments-section { padding: 0; background: #fff; }
     .attachments-header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: .75rem; }
     .attachments-header h3 { margin: 0; font-size: .95rem; }
     .attachments-header p { margin: .2rem 0 0; color: var(--muted); font-size: .73rem; }
@@ -267,6 +268,15 @@
     .section-toggle { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: .75rem; border: 0; padding: .85rem 1rem; background: var(--surface-soft); color: var(--text); font-weight: 750; text-align: left; }
     .section-toggle span { color: var(--muted); font-size: .72rem; font-weight: 650; }
     .section-content { padding: 1rem; }
+    .section-toggle .section-title { display: flex; flex-direction: column; gap: .18rem; min-width: 0; color: var(--text); font-size: .8rem; font-weight: 750; }
+    .section-summary { overflow: hidden; max-width: 560px; color: var(--muted); font-size: .72rem; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+    .smart-update { grid-column: 1 / -1; padding: 1rem; border: 1px solid #bfdbfe; border-radius: 10px; background: #eff6ff; }
+    .smart-update h3 { margin: 0 0 .25rem; font-size: .95rem; }
+    .smart-update-intro { margin: 0 0 .7rem; color: var(--muted); font-size: .75rem; line-height: 1.45; }
+    .smart-update textarea { min-height: 92px; background: #fff; }
+    .smart-preview { margin-top: .75rem; padding: .8rem; border: 1px solid #c7d2fe; border-radius: 8px; background: #fff; }
+    .smart-preview h4 { margin: 0 0 .55rem; font-size: .8rem; }
+    .smart-preview ul { margin: .35rem 0 0; padding-left: 1.1rem; color: #475467; font-size: .76rem; line-height: 1.5; }
     .structured-table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 9px; background: #fff; }
     .structured-table { width: 100%; min-width: 620px; border-collapse: collapse; }
     .structured-table th { padding: .6rem .65rem; border-bottom: 1px solid var(--border); background: #f8fafc; color: #475467; font-size: .68rem; text-align: left; white-space: nowrap; }
@@ -520,7 +530,7 @@
     function splitStructuredItems(text) {
       return String(text || "")
         .replace(/(?:下一步|接下来)(?:第一|第1|一、|1[.、])?/g, "")
-        .split(/(?:\n|；|;|，|,|。|第一|第二|第三|第四|第五|第六|第七|第八|第九|第十|1[.、]|2[.、]|3[.、]|4[.、]|5[.、]|6[.、]|7[.、]|8[.、]|9[.、]|并且|然后)/)
+        .split(/(?:\n|；|;|，|,|。|第一|第二|第三|第四|第五|第六|第七|第八|第九|第十|1[.、]|2[.、]|3[.、]|4[.、]|5[.、]|6[.、]|7[.、]|8[.、]|9[.、]|并且|然后|再)/)
         .map(item => item.trim().replace(/^(?:是|要|先|再|和|及|、)+/, ""))
         .filter(Boolean);
     }
@@ -874,6 +884,45 @@
       return normalizeParsedResult(result);
     }
 
+    function compactSummary(text, fallback = "空") {
+      const cleaned = String(text || "").replace(/\s+/g, " ").trim();
+      return cleaned ? (cleaned.length > 52 ? `${cleaned.slice(0, 52)}…` : cleaned) : fallback;
+    }
+
+    function appendLongText(existing, addition) {
+      const oldText = String(existing || "").trim();
+      const newText = String(addition || "").trim();
+      if (!newText) return oldText;
+      return oldText ? `${oldText}\n${newText}` : newText;
+    }
+
+    function parseSmartUpdate(text) {
+      const compact = String(text || "").trim();
+      const result = { feedbackItems: [], nextActions: [], processNotes: "", finalResult: "" };
+      if (!compact) return result;
+
+      const hasFeedback = /反馈|老板反馈|客户反馈|供应商反馈/.test(compact);
+      const hasNextAction = /下一步|接下来|先|再|然后/.test(compact);
+      const hasProcess = /今天|已经|处理了|进展|发现|沟通了/.test(compact);
+      const hasFinal = /最终|结果|已提交|已经提交|已完成交付|完成交付/.test(compact);
+
+      if (hasFeedback) result.feedbackItems.push(compact);
+
+      if (hasNextAction) {
+        let nextText = compact
+          .replace(/^(?:下一步|接下来)(?:是|要|先)?/, "")
+          .replace(/^先/, "")
+          .trim();
+        const items = splitStructuredItems(nextText).filter(item => !/^(?:下一步|接下来)$/.test(item));
+        result.nextActions = items.length ? items : [nextText || compact];
+      }
+
+      if (hasFinal) result.finalResult = compact;
+      if (!hasFinal && (hasProcess || (!hasFeedback && !hasNextAction))) result.processNotes = compact;
+
+      return result;
+    }
+
     // Rule Parse regression examples:
     // 老板让我明天跟进俄罗斯水槽说明书修改，项目是俄罗斯水槽，优先级高，目前进行中，下一步整理俄文问题清单
     // 客户要求后天确认俄罗斯标签内容，项目是包装标签，优先级高，当前待办
@@ -926,7 +975,11 @@
       const [pendingAttachments, setPendingAttachments] = useState([]);
       const [statusMessage, setStatusMessage] = useState("");
       const [statusListening, setStatusListening] = useState(false);
-      const [openSections, setOpenSections] = useState({ next: false, feedback: false, process: false, final: false, legacy: false });
+      const [smartUpdateText, setSmartUpdateText] = useState("");
+      const [smartUpdatePreview, setSmartUpdatePreview] = useState(null);
+      const [smartUpdateMessage, setSmartUpdateMessage] = useState("");
+      const [smartUpdateListening, setSmartUpdateListening] = useState(false);
+      const [openSections, setOpenSections] = useState({ background: false, attachments: false, next: false, feedback: false, process: false, final: false, legacy: false });
       const quickEntryRef = useRef(null);
       useEffect(() => {
         const closeOnEscape = event => event.key === "Escape" && onClose();
@@ -939,6 +992,11 @@
       }, [quickEntryStart]);
 
       const change = event => setForm({ ...form, [event.target.name]: event.target.value });
+      const backgroundSummary = compactSummary(form.background);
+      const processSummary = compactSummary(form.processNotes);
+      const finalSummary = compactSummary(form.finalResult);
+      const nextActionItems = normalizeNextActions(form.nextActions, "", true);
+      const feedbackRecordsItems = normalizeFeedbackItems(form.feedbackItems, "", true);
       const submit = event => {
         event.preventDefault();
         if (!form.title.trim()) return;
@@ -954,6 +1012,48 @@
       };
 
       const toggleSection = section => setOpenSections(current => ({ ...current, [section]: !current[section] }));
+
+      const parseSmartUpdateText = (text = smartUpdateText) => {
+        if (!String(text || "").trim()) {
+          setSmartUpdateMessage("请先输入或语音补充一段更新内容。");
+          return;
+        }
+        const preview = parseSmartUpdate(text);
+        setSmartUpdatePreview(preview);
+        setSmartUpdateMessage("已生成补充预览，确认后点击“应用补充内容”。");
+      };
+
+      const applySmartUpdate = () => {
+        if (!smartUpdatePreview) return;
+        const next = { ...form };
+        if (smartUpdatePreview.nextActions.length) {
+          next.nextActions = [
+            ...normalizeNextActions(next.nextActions),
+            ...smartUpdatePreview.nextActions.map(text => ({ text, status: "未开始" }))
+          ];
+          next.nextAction = nextActionsToText(next.nextActions);
+        }
+        if (smartUpdatePreview.feedbackItems.length) {
+          next.feedbackItems = [
+            ...normalizeFeedbackItems(next.feedbackItems),
+            ...smartUpdatePreview.feedbackItems.map(text => ({ text, status: "新反馈" }))
+          ];
+          next.feedbackRecords = feedbackItemsToText(next.feedbackItems);
+        }
+        if (smartUpdatePreview.processNotes) next.processNotes = appendLongText(next.processNotes, smartUpdatePreview.processNotes);
+        if (smartUpdatePreview.finalResult) next.finalResult = appendLongText(next.finalResult, smartUpdatePreview.finalResult);
+        setForm(next);
+        setOpenSections(current => ({
+          ...current,
+          next: current.next || smartUpdatePreview.nextActions.length > 0,
+          feedback: current.feedback || smartUpdatePreview.feedbackItems.length > 0,
+          process: current.process || Boolean(smartUpdatePreview.processNotes),
+          final: current.final || Boolean(smartUpdatePreview.finalResult)
+        }));
+        setSmartUpdateText("");
+        setSmartUpdatePreview(null);
+        setSmartUpdateMessage("补充内容已加入表单。请点击 Save task 保存同步。");
+      };
 
       const fillParsedResult = result => {
         setPreviousForm(form);
@@ -1128,6 +1228,35 @@
         recognition.start();
       };
 
+      const startSmartUpdateVoice = () => {
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        if (!SpeechRecognition) {
+          setSmartUpdateMessage("当前浏览器不支持语音补充，你可以手动输入。");
+          return;
+        }
+        const recognition = new SpeechRecognition();
+        recognition.lang = navigator.language || "zh-CN";
+        recognition.interimResults = false;
+        recognition.continuous = false;
+        recognition.onstart = () => {
+          setSmartUpdateListening(true);
+          setSmartUpdateMessage("正在听，请说出要补充到任务里的更新。");
+        };
+        recognition.onend = () => setSmartUpdateListening(false);
+        recognition.onerror = event => {
+          setSmartUpdateListening(false);
+          setSmartUpdateMessage(`语音补充失败：${event.error}`);
+        };
+        recognition.onresult = event => {
+          const transcript = Array.from(event.results).map(result => result[0].transcript).join(" ");
+          const nextText = `${smartUpdateText}${smartUpdateText ? " " : ""}${transcript}`;
+          setSmartUpdateText(nextText);
+          setSmartUpdatePreview(parseSmartUpdate(nextText));
+          setSmartUpdateMessage("已识别语音补充，并生成预览。确认后点击“应用补充内容”。");
+        };
+        recognition.start();
+      };
+
       const startStatusVoice = () => {
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
         if (!SpeechRecognition) {
@@ -1188,31 +1317,58 @@
             </div>
             <div className="form-body">
               <div className="form-grid">
-                <section className="quick-entry">
-                  <h3>Smart Quick Entry</h3>
-                  <p className="quick-entry-intro">Type, paste, or dictate a natural-language task description. Parsing fills detected fields automatically, but nothing is saved until you click Save task.</p>
-                  <textarea ref={quickEntryRef} value={quickText} onChange={event => setQuickText(event.target.value)} placeholder="Example: 老板让我今天跟进俄罗斯水槽说明书修改，优先级高，截止到7月10日，目前进行中，下一步整理问题清单，客户反馈说俄文用词需要再确认。" />
-                  <div className="quick-actions">
-                    <button type="button" className="btn btn-primary" onClick={parseWithAI} disabled={parsing}>{parsing ? "AI Parsing…" : "AI Parse"}</button>
-                    <button type="button" className="btn btn-secondary" onClick={parseWithRules}>Rule Parse</button>
-                    <button type="button" className={`btn btn-secondary${listening ? " mic-active" : ""}`} onClick={startDictation}>{listening ? "Listening…" : "Dictate"}</button>
-                    <button type="button" className="btn btn-secondary" onClick={clearQuickEntry}>Clear</button>
-                    <button type="button" className="btn btn-secondary" onClick={onOpenAISettings}>AI Settings</button>
-                  </div>
-                  {parseMessage && <p className="parse-message">{parseMessage}</p>}
-                  {parsedResult && (
-                    <div className="parsed-preview">
-                      <h4>Parsed result preview</h4>
-                      <div className="preview-grid">
-                        {PARSED_FIELDS.filter(([key]) => parsedResult[key]).map(([key, label]) => (
-                          <div className="preview-item" key={key}><strong>{label}:</strong> {key === "status" ? statusTitle(parsedResult[key]) : parsedResult[key]}</div>
-                        ))}
-                        {!PARSED_FIELDS.some(([key]) => parsedResult[key]) && <div className="preview-item">No task fields were detected.</div>}
-                      </div>
-                      {previousForm && <div className="quick-actions"><button type="button" className="btn btn-secondary" onClick={undoParsedFill}>Undo parsed fill</button></div>}
+                {isNew && (
+                  <section className="quick-entry">
+                    <h3>Smart Quick Entry</h3>
+                    <p className="quick-entry-intro">Type, paste, or dictate a natural-language task description. Parsing fills detected fields automatically, but nothing is saved until you click Save task.</p>
+                    <textarea ref={quickEntryRef} value={quickText} onChange={event => setQuickText(event.target.value)} placeholder="Example: 老板让我今天跟进俄罗斯水槽说明书修改，优先级高，截止到7月10日，目前进行中，下一步整理问题清单，客户反馈说俄文用词需要再确认。" />
+                    <div className="quick-actions">
+                      <button type="button" className="btn btn-primary" onClick={parseWithAI} disabled={parsing}>{parsing ? "AI Parsing…" : "AI Parse"}</button>
+                      <button type="button" className="btn btn-secondary" onClick={parseWithRules}>Rule Parse</button>
+                      <button type="button" className={`btn btn-secondary${listening ? " mic-active" : ""}`} onClick={startDictation}>{listening ? "Listening…" : "Dictate"}</button>
+                      <button type="button" className="btn btn-secondary" onClick={clearQuickEntry}>Clear</button>
+                      <button type="button" className="btn btn-secondary" onClick={onOpenAISettings}>AI Settings</button>
                     </div>
-                  )}
-                </section>
+                    {parseMessage && <p className="parse-message">{parseMessage}</p>}
+                    {parsedResult && (
+                      <div className="parsed-preview">
+                        <h4>Parsed result preview</h4>
+                        <div className="preview-grid">
+                          {PARSED_FIELDS.filter(([key]) => parsedResult[key]).map(([key, label]) => (
+                            <div className="preview-item" key={key}><strong>{label}:</strong> {key === "status" ? statusTitle(parsedResult[key]) : parsedResult[key]}</div>
+                          ))}
+                          {!PARSED_FIELDS.some(([key]) => parsedResult[key]) && <div className="preview-item">No task fields were detected.</div>}
+                        </div>
+                        {previousForm && <div className="quick-actions"><button type="button" className="btn btn-secondary" onClick={undoParsedFill}>Undo parsed fill</button></div>}
+                      </div>
+                    )}
+                  </section>
+                )}
+                {!isNew && (
+                  <section className="smart-update">
+                    <h3>智能补充</h3>
+                    <p className="smart-update-intro">输入或语音补充任务进展。系统会判断应该追加到反馈、下一步动作、工作流程说明或最终结果，不会覆盖已有内容。</p>
+                    <textarea value={smartUpdateText} onChange={event => { setSmartUpdateText(event.target.value); setSmartUpdatePreview(null); }} placeholder="例如：老板反馈说 SOP 要加上负责人和截止时间 / 下一步先整理现有文件，再补充交接表格 / 今天已经整理完现有资料…" />
+                    <div className="quick-actions">
+                      <button type="button" className="btn btn-secondary" onClick={() => parseSmartUpdateText()}>解析补充</button>
+                      <button type="button" className={`btn btn-secondary${smartUpdateListening ? " mic-active" : ""}`} onClick={startSmartUpdateVoice}>{smartUpdateListening ? "正在听…" : "语音补充"}</button>
+                      <button type="button" className="btn btn-secondary" onClick={() => { setSmartUpdateText(""); setSmartUpdatePreview(null); setSmartUpdateMessage(""); }}>清空</button>
+                    </div>
+                    {smartUpdateMessage && <p className="status-message">{smartUpdateMessage}</p>}
+                    {smartUpdatePreview && (
+                      <div className="smart-preview">
+                        <h4>将添加到：</h4>
+                        <ul>
+                          {smartUpdatePreview.feedbackItems.map((item, index) => <li key={`feedback-${index}`}>反馈记录：{item}</li>)}
+                          {smartUpdatePreview.nextActions.map((item, index) => <li key={`next-${index}`}>下一步动作：{item}</li>)}
+                          {smartUpdatePreview.processNotes && <li>工作流程说明：{smartUpdatePreview.processNotes}</li>}
+                          {smartUpdatePreview.finalResult && <li>最终结果：{smartUpdatePreview.finalResult}</li>}
+                        </ul>
+                        <div className="quick-actions"><button type="button" className="btn btn-primary" onClick={applySmartUpdate}>应用补充内容</button></div>
+                      </div>
+                    )}
+                  </section>
+                )}
                 <div className="field full">
                   <label htmlFor="title">Task title <span className="required">*</span></label>
                   <input id="title" name="title" value={form.title} onChange={change} placeholder="What needs to be done?" autoFocus />
@@ -1225,10 +1381,17 @@
                   <label htmlFor="project">Project or category</label>
                   <input id="project" name="project" value={form.project} onChange={change} placeholder="e.g. Website launch" />
                 </div>
-                <div className="field full">
-                  <label htmlFor="background">Task background</label>
-                  <textarea id="background" name="background" value={form.background} onChange={change} placeholder="Why is this task needed? Add the request, context, or expected outcome…" />
-                </div>
+                <section className="collapsible-section">
+                  <button type="button" className="section-toggle" onClick={() => toggleSection("background")}>
+                    <span className="section-title">任务背景 <span className="section-summary">{backgroundSummary}</span></span>
+                    <span>{openSections.background ? "收起" : "展开"}</span>
+                  </button>
+                  {openSections.background && (
+                    <div className="section-content">
+                      <textarea id="background" name="background" value={form.background} onChange={change} placeholder="Why is this task needed? Add the request, context, or expected outcome…" />
+                    </div>
+                  )}
+                </section>
                 <div className="field">
                   <label htmlFor="receivedDate">Received date</label>
                   <input id="receivedDate" type="date" name="receivedDate" value={form.receivedDate} onChange={change} />
@@ -1253,75 +1416,81 @@
                   </div>
                   {statusMessage && <p className="status-message">{statusMessage}</p>}
                 </div>
-                <section className="attachments-section">
-                  <div className="attachments-header">
-                    <div>
-                      <h3>附件</h3>
-                      <p>这里只保存云端文件链接记录，不保存文件本体，也不会删除云端原文件。</p>
-                    </div>
-                    <div>
-                      <button type="button" className="btn btn-secondary" onClick={() => setShowAttachmentInput(current => !current)}>添加附件链接</button>
-                    </div>
-                  </div>
-                  {showAttachmentInput && (
-                    <div className="attachment-link-box">
-                      <label htmlFor="attachmentText">粘贴文件链接或包含文件名的整段文字</label>
-                      <textarea id="attachmentText" value={attachmentText} onChange={event => { setAttachmentText(event.target.value); setPendingAttachments([]); }} placeholder={"俄罗斯水槽说明书修改清单.xlsx https://kdocs.cn/xxxx\n老板反馈截图.png https://feishu.cn/xxxx\nhttps://kdocs.cn/xxxx"} />
-                      <div className="quick-actions">
-                        <button type="button" className="btn btn-secondary" onClick={prepareAttachmentLinks}>识别链接</button>
-                        <button type="button" className="btn btn-primary" onClick={saveAttachmentLinks}>保存附件记录</button>
-                        <button type="button" className="btn btn-secondary" onClick={() => { setAttachmentText(""); setPendingAttachments([]); setShowAttachmentInput(false); }}>取消</button>
+                <section className="collapsible-section attachments-section">
+                  <button type="button" className="section-toggle" onClick={() => toggleSection("attachments")}>
+                    <span className="section-title">附件 <span className="section-summary">这里只保存云端文件链接记录，不保存文件本体。</span></span>
+                    <span>{attachmentCount(form)}项</span>
+                  </button>
+                  {openSections.attachments && (
+                    <div className="section-content">
+                      <div className="attachments-header">
+                        <div><p>点击文件名会打开云端链接。删除只会删除本任务里的记录，不会删除云端原文件。</p></div>
+                        <div><button type="button" className="btn btn-secondary" onClick={() => setShowAttachmentInput(current => !current)}>添加附件链接</button></div>
                       </div>
-                      {pendingAttachments.length > 0 && (
-                        <div className="structured-table-wrap">
-                          <table className="structured-table">
-                            <thead><tr><th>文件名</th><th>链接</th></tr></thead>
-                            <tbody>
-                              {pendingAttachments.map((attachment, index) => (
-                                <tr key={attachment.id}>
-                                  <td><input value={attachment.fileName} onChange={event => updatePendingAttachmentName(index, event.target.value)} /></td>
-                                  <td><span className="table-summary">{attachment.fileUrl}</span></td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
+                      {showAttachmentInput && (
+                        <div className="attachment-link-box">
+                          <label htmlFor="attachmentText">粘贴文件链接或包含文件名的整段文字</label>
+                          <textarea id="attachmentText" value={attachmentText} onChange={event => { setAttachmentText(event.target.value); setPendingAttachments([]); }} placeholder={"俄罗斯水槽说明书修改清单.xlsx https://kdocs.cn/xxxx\n老板反馈截图.png https://feishu.cn/xxxx\nhttps://kdocs.cn/xxxx"} />
+                          <div className="quick-actions">
+                            <button type="button" className="btn btn-secondary" onClick={prepareAttachmentLinks}>识别链接</button>
+                            <button type="button" className="btn btn-primary" onClick={saveAttachmentLinks}>保存附件记录</button>
+                            <button type="button" className="btn btn-secondary" onClick={() => { setAttachmentText(""); setPendingAttachments([]); setShowAttachmentInput(false); }}>取消</button>
+                          </div>
+                          {pendingAttachments.length > 0 && (
+                            <div className="structured-table-wrap">
+                              <table className="structured-table">
+                                <thead><tr><th>文件名</th><th>链接</th></tr></thead>
+                                <tbody>
+                                  {pendingAttachments.map((attachment, index) => (
+                                    <tr key={attachment.id}>
+                                      <td><input value={attachment.fileName} onChange={event => updatePendingAttachmentName(index, event.target.value)} /></td>
+                                      <td><span className="table-summary">{attachment.fileUrl}</span></td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          )}
                         </div>
                       )}
+                      <div className="attachments-table-wrap">
+                        <table className="attachments-table">
+                          <thead>
+                            <tr>
+                              <th>文件名</th>
+                              <th>添加时间</th>
+                              <th>删除记录</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {attachmentCount(form) ? form.attachments.map(attachment => (
+                              <tr key={attachment.id}>
+                                <td className="attachment-name"><a href={attachment.fileUrl} target="_blank" rel="noopener noreferrer">{attachment.fileName}</a></td>
+                                <td>{formatDate(attachment.uploadedAt, true)}</td>
+                                <td><button type="button" className="attachment-action danger" onClick={() => deleteAttachment(attachment)}>删除记录</button></td>
+                              </tr>
+                            )) : (
+                              <tr><td colSpan="3">还没有附件链接记录。</td></tr>
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                      {attachmentMessage && <p className="attachment-message">{attachmentMessage}</p>}
                     </div>
                   )}
-                  <div className="attachments-table-wrap">
-                    <table className="attachments-table">
-                      <thead>
-                        <tr>
-                          <th>文件名</th>
-                          <th>添加时间</th>
-                          <th>删除记录</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {attachmentCount(form) ? form.attachments.map(attachment => (
-                          <tr key={attachment.id}>
-                            <td className="attachment-name"><a href={attachment.fileUrl} target="_blank" rel="noopener noreferrer">{attachment.fileName}</a></td>
-                            <td>{formatDate(attachment.uploadedAt, true)}</td>
-                            <td><button type="button" className="attachment-action danger" onClick={() => deleteAttachment(attachment)}>删除记录</button></td>
-                          </tr>
-                        )) : (
-                          <tr><td colSpan="3">还没有附件链接记录。</td></tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-                  {attachmentMessage && <p className="attachment-message">{attachmentMessage}</p>}
                 </section>
                 <section className="collapsible-section">
-                  <button type="button" className="section-toggle" onClick={() => toggleSection("next")}>下一步动作 <span>{normalizeNextActions(form.nextActions, "", true).length} 项</span></button>
+                  <button type="button" className="section-toggle" onClick={() => toggleSection("next")}>
+                    <span className="section-title">下一步动作 <span className="section-summary">{nextActionItems[0]?.text || "空"}</span></span>
+                    <span>{nextActionItems.length} 项</span>
+                  </button>
                   {openSections.next && (
                     <div className="section-content">
                       <div className="structured-table-wrap">
                         <table className="structured-table">
                           <thead><tr><th>序号</th><th>下一步动作</th><th>状态</th><th>删除</th></tr></thead>
                           <tbody>
-                            {normalizeNextActions(form.nextActions, "", true).map((item, index) => (
+                            {nextActionItems.map((item, index) => (
                               <tr key={index}>
                                 <td className="structured-index">{index + 1}</td>
                                 <td><input value={item.text} onChange={event => updateNextAction(index, "text", event.target.value)} placeholder="填写下一步动作" /></td>
@@ -1333,7 +1502,7 @@
                                 <td><button type="button" className="attachment-action danger" onClick={() => deleteNextAction(index)}>Delete</button></td>
                               </tr>
                             ))}
-                            {!normalizeNextActions(form.nextActions, "", true).length && <tr><td colSpan="4">还没有下一步动作。</td></tr>}
+                            {!nextActionItems.length && <tr><td colSpan="4">还没有下一步动作。</td></tr>}
                           </tbody>
                         </table>
                       </div>
@@ -1342,14 +1511,17 @@
                   )}
                 </section>
                 <section className="collapsible-section">
-                  <button type="button" className="section-toggle" onClick={() => toggleSection("feedback")}>反馈记录 <span>{normalizeFeedbackItems(form.feedbackItems, "", true).length} 项</span></button>
+                  <button type="button" className="section-toggle" onClick={() => toggleSection("feedback")}>
+                    <span className="section-title">反馈记录 <span className="section-summary">{feedbackRecordsItems[0]?.text || "空"}</span></span>
+                    <span>{feedbackRecordsItems.length} 项</span>
+                  </button>
                   {openSections.feedback && (
                     <div className="section-content">
                       <div className="structured-table-wrap">
                         <table className="structured-table">
                           <thead><tr><th>序号</th><th>反馈内容</th><th>状态</th><th>删除</th></tr></thead>
                           <tbody>
-                            {normalizeFeedbackItems(form.feedbackItems, "", true).map((item, index) => (
+                            {feedbackRecordsItems.map((item, index) => (
                               <tr key={index}>
                                 <td className="structured-index">{index + 1}</td>
                                 <td><input value={item.text} onChange={event => updateFeedbackItem(index, "text", event.target.value)} placeholder="填写反馈内容" /></td>
@@ -1361,7 +1533,7 @@
                                 <td><button type="button" className="attachment-action danger" onClick={() => deleteFeedbackItem(index)}>Delete</button></td>
                               </tr>
                             ))}
-                            {!normalizeFeedbackItems(form.feedbackItems, "", true).length && <tr><td colSpan="4">还没有反馈记录。</td></tr>}
+                            {!feedbackRecordsItems.length && <tr><td colSpan="4">还没有反馈记录。</td></tr>}
                           </tbody>
                         </table>
                       </div>
@@ -1370,11 +1542,17 @@
                   )}
                 </section>
                 <section className="collapsible-section">
-                  <button type="button" className="section-toggle" onClick={() => toggleSection("process")}>工作流程说明 <span>{form.processNotes ? "有内容" : "空"}</span></button>
+                  <button type="button" className="section-toggle" onClick={() => toggleSection("process")}>
+                    <span className="section-title">工作流程说明 <span className="section-summary">{processSummary}</span></span>
+                    <span>{form.processNotes ? "有内容" : "空"}</span>
+                  </button>
                   {openSections.process && <div className="section-content"><textarea className="long" id="processNotes" name="processNotes" value={form.processNotes} onChange={change} placeholder="Add dated notes about decisions, progress, conversations, or blockers…" /></div>}
                 </section>
                 <section className="collapsible-section">
-                  <button type="button" className="section-toggle" onClick={() => toggleSection("final")}>最终结果 <span>{form.finalResult ? "有内容" : "空"}</span></button>
+                  <button type="button" className="section-toggle" onClick={() => toggleSection("final")}>
+                    <span className="section-title">最终结果 <span className="section-summary">{finalSummary}</span></span>
+                    <span>{form.finalResult ? "有内容" : "空"}</span>
+                  </button>
                   {openSections.final && <div className="section-content"><textarea className="long" id="finalResult" name="finalResult" value={form.finalResult} onChange={change} placeholder="What was delivered or achieved? Add the outcome when the task is complete." /></div>}
                 </section>
                 {form.links && (
