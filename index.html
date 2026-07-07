@@ -111,9 +111,10 @@
     .card-delete:hover { color: var(--danger); }
     .card-meta { display: flex; flex-wrap: wrap; gap: .35rem; margin-bottom: .5rem; }
     .pill { border-radius: 20px; padding: .17rem .45rem; background: #eef2ff; color: #4338ca; font-size: .66rem; font-weight: 650; }
-    .priority-high { background: #fee2e2; color: #b91c1c; }
-    .priority-medium { background: #fef3c7; color: #92400e; }
-    .priority-low { background: #dcfce7; color: #166534; }
+    .priority-p1 { background: #fee2e2; color: #b91c1c; }
+    .priority-p2 { background: #fef3c7; color: #92400e; }
+    .priority-p3 { background: #e0f2fe; color: #0369a1; }
+    .priority-custom { background: #f1f5f9; color: #475569; }
     .card-line { margin: .3rem 0 0; color: var(--muted); font-size: .72rem; line-height: 1.35; }
     .card-line strong { color: #475467; }
     .add-task { margin: 0 .7rem .7rem; border: 1px dashed #b8c0cc; border-radius: 7px; padding: .5rem; background: transparent; color: #596579; font-size: .78rem; }
@@ -283,7 +284,10 @@
     .structured-table td { padding: .55rem .65rem; border-bottom: 1px solid #edf0f3; color: #475467; font-size: .74rem; vertical-align: top; }
     .structured-table tr:last-child td { border-bottom: 0; }
     .structured-table input, .structured-table select { min-width: 130px; }
+    .structured-table textarea { min-width: 220px; min-height: 42px; padding: .45rem .55rem; }
     .structured-index { width: 48px; color: var(--muted); font-weight: 750; }
+    .row-attachment-link { display: inline-flex; align-items: center; gap: .35rem; margin: 0 .45rem .35rem 0; padding: .2rem .35rem; border-radius: 7px; background: #eef2ff; }
+    .row-attachment-link a { color: var(--primary); font-weight: 750; }
     .legacy-links { margin-top: .7rem; padding: .75rem; border-radius: 8px; background: #f8fafc; color: #475467; font-size: .76rem; white-space: pre-wrap; word-break: break-word; }
     .settings-modal { width: min(620px, 100%); }
     .settings-warning { margin: 0 0 1rem; padding: .75rem; border-radius: 8px; background: #fff7ed; color: #9a3412; font-size: .76rem; line-height: 1.45; }
@@ -400,11 +404,13 @@
       { id: "done", title: "完毕", description: "任务已经完成", color: "#22c55e" },
       { id: "archived", title: "归档", description: "旧任务，保留记录", color: "#94a3b8" }
     ];
-    const PRIORITIES = ["Low", "Medium", "High"];
+    const PRIORITIES = ["优先级1", "优先级2", "优先级3"];
+    const ADD_PRIORITY_OPTION = "__add_priority__";
 
     const today = () => new Date().toISOString().slice(0, 10);
     const makeId = () => `task-${Date.now()}-${Math.random().toString(16).slice(2)}`;
     const makeAttachmentId = () => `file-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    const makeRowId = prefix => `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
     const safeFileName = name => String(name || "file").replace(/[\\/#?%*:|"<>]/g, "-");
     const blankTask = status => ({
       id: makeId(),
@@ -414,14 +420,16 @@
       receivedDate: today(),
       project: "",
       background: "",
-      priority: "Medium",
+      priority: "优先级3",
       deadline: "",
       nextAction: "",
       nextActions: [],
       processNotes: "",
+      processItems: [],
       feedbackRecords: "",
       feedbackItems: [],
       finalResult: "",
+      finalResults: [],
       links: "",
       attachments: [],
       order: 0,
@@ -495,28 +503,80 @@
       return attachments;
     }
 
+    function removeAttachmentLines(text) {
+      return String(text || "")
+        .split(/\r?\n/)
+        .filter(line => !/https?:\/\//.test(line) && !/^【(?:金山文档|WPS|飞书|飞书文档|云文档)】/.test(line.trim()))
+        .join("\n")
+        .trim();
+    }
+
+    function todayTimeText() {
+      return new Date().toLocaleString([], { year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+    }
+
+    function extractDueText(text) {
+      const match = String(text || "").match(/今天|明天|后天|本周|下周|周[一二三四五六日天]|星期[一二三四五六日天]|\d{1,2}月\d{1,2}日?|20\d{2}[-\/]\d{1,2}[-\/]\d{1,2}/);
+      return match?.[0] || "";
+    }
+
+    function removeDuePrefix(text, dueText) {
+      return String(text || "").replace(dueText || "", "").replace(/^(?:要|先|再|然后|接着|继续|完成|把|将)+/, "").trim();
+    }
+
     function normalizeNextActions(items, legacyText = "", keepEmpty = false) {
       if (Array.isArray(items) && items.length) {
         const prepared = items
           .map(item => ({
+            id: typeof item === "object" && item?.id ? item.id : makeRowId("next"),
             text: typeof item === "string" ? item : (item?.text || ""),
+            dueText: typeof item === "object" ? (item?.dueText || "") : "",
             status: ["未开始", "进行中", "已完成"].includes(item?.status) ? item.status : "未开始"
           }));
-        return (keepEmpty ? prepared : prepared.filter(item => item.text.trim())).map(item => ({ ...item, text: item.text.trim() }));
+        return (keepEmpty ? prepared : prepared.filter(item => item.text.trim())).map(item => ({ ...item, text: item.text.trim(), dueText: item.dueText.trim() }));
       }
-      return legacyText?.trim() ? [{ text: legacyText.trim(), status: "未开始" }] : [];
+      return legacyText?.trim() ? [{ id: makeRowId("next"), text: legacyText.trim(), dueText: "", status: "未开始" }] : [];
     }
 
     function normalizeFeedbackItems(items, legacyText = "", keepEmpty = false) {
       if (Array.isArray(items) && items.length) {
         const prepared = items
           .map(item => ({
+            id: typeof item === "object" && item?.id ? item.id : makeRowId("feedback"),
             text: typeof item === "string" ? item : (item?.text || ""),
+            createdAt: typeof item === "object" ? (item?.createdAt || "") : "",
+            attachments: typeof item === "object" && Array.isArray(item?.attachments) ? item.attachments.map(normalizeAttachment) : [],
             status: ["新反馈", "处理中", "已解决"].includes(item?.status) ? item.status : "新反馈"
           }));
-        return (keepEmpty ? prepared : prepared.filter(item => item.text.trim())).map(item => ({ ...item, text: item.text.trim() }));
+        return (keepEmpty ? prepared : prepared.filter(item => item.text.trim() || item.attachments.length)).map(item => ({ ...item, text: item.text.trim(), createdAt: item.createdAt.trim() }));
       }
-      return legacyText?.trim() ? [{ text: legacyText.trim(), status: "新反馈" }] : [];
+      return legacyText?.trim() ? [{ id: makeRowId("feedback"), text: legacyText.trim(), createdAt: "", attachments: [], status: "新反馈" }] : [];
+    }
+
+    function normalizeProcessItems(items, legacyText = "", keepEmpty = false) {
+      if (Array.isArray(items) && items.length) {
+        const prepared = items.map(item => ({
+          id: typeof item === "object" && item?.id ? item.id : makeRowId("process"),
+          text: typeof item === "string" ? item : (item?.text || ""),
+          createdAt: typeof item === "object" ? (item?.createdAt || "") : "",
+          attachments: typeof item === "object" && Array.isArray(item?.attachments) ? item.attachments.map(normalizeAttachment) : []
+        }));
+        return (keepEmpty ? prepared : prepared.filter(item => item.text.trim() || item.attachments.length)).map(item => ({ ...item, text: item.text.trim(), createdAt: item.createdAt.trim() }));
+      }
+      return legacyText?.trim() ? [{ id: makeRowId("process"), text: legacyText.trim(), createdAt: "", attachments: [] }] : [];
+    }
+
+    function normalizeFinalResults(items, legacyText = "", keepEmpty = false) {
+      if (Array.isArray(items) && items.length) {
+        const prepared = items.map(item => ({
+          id: typeof item === "object" && item?.id ? item.id : makeRowId("final"),
+          text: typeof item === "string" ? item : (item?.text || ""),
+          createdAt: typeof item === "object" ? (item?.createdAt || "") : "",
+          attachments: typeof item === "object" && Array.isArray(item?.attachments) ? item.attachments.map(normalizeAttachment) : []
+        }));
+        return (keepEmpty ? prepared : prepared.filter(item => item.text.trim() || item.attachments.length)).map(item => ({ ...item, text: item.text.trim(), createdAt: item.createdAt.trim() }));
+      }
+      return legacyText?.trim() ? [{ id: makeRowId("final"), text: legacyText.trim(), createdAt: "", attachments: [] }] : [];
     }
 
     function nextActionsToText(items) {
@@ -525,6 +585,14 @@
 
     function feedbackItemsToText(items) {
       return normalizeFeedbackItems(items).map(item => item.text).join("\n");
+    }
+
+    function processItemsToText(items) {
+      return normalizeProcessItems(items).map(item => item.text).join("\n");
+    }
+
+    function finalResultsToText(items) {
+      return normalizeFinalResults(items).map(item => item.text).join("\n");
     }
 
     function splitStructuredItems(text) {
@@ -548,14 +616,16 @@
         background: task.background || "",
         source: task.source || "",
         receivedDate: task.receivedDate || "",
-        priority: PRIORITIES.includes(task.priority) ? task.priority : "Medium",
+        priority: normalizePriority(task.priority) || "优先级3",
         deadline: task.deadline || "",
         nextAction: task.nextAction || "",
         nextActions: normalizeNextActions(task.nextActions, task.nextAction),
         processNotes: task.processNotes || "",
+        processItems: normalizeProcessItems(task.processItems, task.processNotes),
         feedbackRecords: task.feedbackRecords || "",
         feedbackItems: normalizeFeedbackItems(task.feedbackItems, task.feedbackRecords),
         finalResult: task.finalResult || "",
+        finalResults: normalizeFinalResults(task.finalResults, task.finalResult),
         links: task.links || "",
         attachments: Array.isArray(task.attachments) ? task.attachments.map(normalizeAttachment) : [],
         order: Number.isFinite(task.order) ? task.order : 0,
@@ -600,14 +670,16 @@
         receivedDate: task.receivedDate || "",
         project: task.project || "",
         background: task.background || "",
-        priority: task.priority || "Medium",
+        priority: normalizePriority(task.priority) || "优先级3",
         deadline: task.deadline || "",
         nextAction: task.nextAction || "",
         nextActions: normalizeNextActions(task.nextActions, task.nextAction),
         processNotes: task.processNotes || "",
+        processItems: normalizeProcessItems(task.processItems, task.processNotes),
         feedbackRecords: task.feedbackRecords || "",
         feedbackItems: normalizeFeedbackItems(task.feedbackItems, task.feedbackRecords),
         finalResult: task.finalResult || "",
+        finalResults: normalizeFinalResults(task.finalResults, task.finalResult),
         links: task.links || "",
         attachments: Array.isArray(task.attachments) ? task.attachments.map(normalizeAttachment) : [],
         status: task.status || "new",
@@ -676,7 +748,7 @@
     const PARSED_FIELDS = [
       ["title", "Title"], ["source", "Source"], ["project", "Project"],
       ["background", "Background"], ["receivedDate", "Received date"],
-      ["dueDate", "Due date"], ["priority", "Priority"], ["status", "Status"],
+      ["dueDate", "Due date"], ["priority", "优先级"], ["status", "Status"],
       ["nextAction", "Next action"], ["workflowNotes", "Workflow notes"],
       ["feedback", "Feedback"], ["finalResult", "Final result"]
     ];
@@ -693,11 +765,37 @@
     }
 
     function normalizePriority(value) {
-      const text = String(value || "").trim().toLowerCase();
-      if (["high", "高", "urgent", "紧急", "重要"].includes(text)) return "High";
-      if (["medium", "中", "normal", "普通", "一般"].includes(text)) return "Medium";
-      if (["low", "低", "不急"].includes(text)) return "Low";
-      return "";
+      const original = String(value || "").trim();
+      const text = original.toLowerCase();
+      if (/^\d+$/.test(original)) return `优先级${Number(original)}`;
+      const explicit = original.match(/^优先级\s*(\d+)$/);
+      if (explicit) return `优先级${Number(explicit[1])}`;
+      if (["high", "高", "高的", "urgent", "紧急", "最高", "高优先级", "重要"].includes(text)) return "优先级1";
+      if (["medium", "中", "中等", "中等的", "normal", "一般"].includes(text)) return "优先级2";
+      if (["low", "低", "低的", "普通", "不急", "低优先级"].includes(text)) return "优先级3";
+      return original;
+    }
+
+    function priorityRank(priority) {
+      const normalized = normalizePriority(priority);
+      const match = normalized.match(/^优先级(\d+)$/);
+      return match ? Number(match[1]) : 1000;
+    }
+
+    function comparePriority(a, b) {
+      return priorityRank(a) - priorityRank(b) || String(a || "").localeCompare(String(b || ""));
+    }
+
+    function priorityClass(priority) {
+      const normalized = normalizePriority(priority);
+      if (normalized === "优先级1") return "priority-p1";
+      if (normalized === "优先级2") return "priority-p2";
+      if (normalized === "优先级3") return "priority-p3";
+      return "priority-custom";
+    }
+
+    function uniquePriorityOptions(values = []) {
+      return [...new Set([...PRIORITIES, ...values.map(normalizePriority).filter(Boolean)])].sort(comparePriority);
     }
 
     function normalizeStatus(value) {
@@ -822,11 +920,11 @@
       const result = emptyParsedResult();
       const compact = text.trim();
 
-      const explicitPriority = compact.match(/(?:优先级|priority)\s*(?:是|为|[:：])?\s*(高|中|低|high|medium|normal|low|urgent|紧急|重要|普通|一般|不急)/i);
+      const explicitPriority = compact.match(/(?:优先级|priority)\s*(?:是|为|[:：])?\s*(\d+|高|中|低|high|medium|normal|low|urgent|紧急|最高|高优先级|重要|中等|普通|一般|不急|低优先级)/i);
       if (explicitPriority) result.priority = normalizePriority(explicitPriority[1]);
-      else if (/(?:紧急|重要|urgent|\bhigh\b)/i.test(compact)) result.priority = "High";
-      else if (/(?:普通|一般|\bnormal\b|\bmedium\b)/i.test(compact)) result.priority = "Medium";
-      else if (/(?:不急|\blow\b)/i.test(compact)) result.priority = "Low";
+      else if (/(?:最高|紧急|高优先级|重要|urgent|\bhigh\b)/i.test(compact)) result.priority = "优先级1";
+      else if (/(?:中等|一般|\bnormal\b|\bmedium\b)/i.test(compact)) result.priority = "优先级2";
+      else if (/(?:普通|不急|低优先级|\blow\b)/i.test(compact)) result.priority = "优先级3";
 
       const statusChecks = [
         [/(等待反馈|等反馈|待反馈|waiting for feedback)/i, "feedback"],
@@ -898,27 +996,72 @@
 
     function parseSmartUpdate(text) {
       const compact = String(text || "").trim();
-      const result = { feedbackItems: [], nextActions: [], processNotes: "", finalResult: "" };
+      const attachments = parseAttachmentLinks(compact);
+      const contentText = removeAttachmentLines(compact);
+      const result = { feedbackItems: [], nextActions: [], processItems: [], finalResults: [], attachments };
       if (!compact) return result;
 
-      const hasFeedback = /反馈|老板反馈|客户反馈|供应商反馈/.test(compact);
-      const hasNextAction = /下一步|接下来|先|再|然后/.test(compact);
-      const hasProcess = /今天|已经|处理了|进展|发现|沟通了/.test(compact);
-      const hasFinal = /最终|结果|已提交|已经提交|已完成交付|完成交付/.test(compact);
+      const hasFeedback = /反馈|老板反馈|客户反馈|供应商反馈|领导反馈/.test(contentText);
+      const hasExplicitNextAction = /下一步|接下来/.test(contentText);
+      const hasProcess = /今天|已经|处理了|整理了|进展|发现|沟通了/.test(contentText);
+      const hasFinal = /最终|结果|已提交|已经提交|已完成交付|完成交付/.test(contentText);
+      const timeText = todayTimeText();
 
-      if (hasFeedback) result.feedbackItems.push(compact);
+      const addFeedback = (textValue, rowAttachments = []) => {
+        if (textValue.trim() || rowAttachments.length) {
+          result.feedbackItems.push({ id: makeRowId("feedback"), text: textValue.trim(), createdAt: timeText, attachments: rowAttachments, status: "新反馈" });
+        }
+      };
+      const addNextAction = (textValue, dueText = "") => {
+        if (textValue.trim()) {
+          result.nextActions.push({ id: makeRowId("next"), text: textValue.trim(), dueText: dueText.trim(), status: "未开始" });
+        }
+      };
+      const addProcess = (textValue, rowAttachments = []) => {
+        if (textValue.trim() || rowAttachments.length) {
+          result.processItems.push({ id: makeRowId("process"), text: textValue.trim(), createdAt: timeText, attachments: rowAttachments });
+        }
+      };
+      const addFinal = (textValue, rowAttachments = []) => {
+        if (textValue.trim() || rowAttachments.length) {
+          result.finalResults.push({ id: makeRowId("final"), text: textValue.trim(), createdAt: timeText, attachments: rowAttachments });
+        }
+      };
 
-      if (hasNextAction) {
-        let nextText = compact
+      if (hasFeedback) addFeedback(contentText, attachments);
+      if (hasFinal) addFinal(contentText, attachments);
+
+      if (hasExplicitNextAction) {
+        let nextText = contentText
           .replace(/^(?:下一步|接下来)(?:是|要|先)?/, "")
           .replace(/^先/, "")
           .trim();
         const items = splitStructuredItems(nextText).filter(item => !/^(?:下一步|接下来)$/.test(item));
-        result.nextActions = items.length ? items : [nextText || compact];
+        (items.length ? items : [nextText]).forEach(item => {
+          const dueText = extractDueText(item);
+          addNextAction(removeDuePrefix(item, dueText), dueText);
+        });
+      } else {
+        const futureMatch = contentText.match(/(明天|后天|本周|下周|周[一二三四五六日天]|星期[一二三四五六日天])([^，。；;\n]+)/);
+        if (futureMatch && (hasFeedback || hasProcess)) {
+          addNextAction(removeDuePrefix(futureMatch[2], futureMatch[1]), futureMatch[1]);
+        }
       }
 
-      if (hasFinal) result.finalResult = compact;
-      if (!hasFinal && (hasProcess || (!hasFeedback && !hasNextAction))) result.processNotes = compact;
+      if (!hasFeedback && !hasFinal) {
+        if (hasProcess) {
+          const processText = contentText.replace(/(?:，|,)?(?:明天|后天|本周|下周|周[一二三四五六日天]|星期[一二三四五六日天])[^，。；;\n]+/, "").trim();
+          addProcess(processText || contentText, attachments);
+        } else if (!result.nextActions.length && contentText) {
+          addProcess(contentText, attachments);
+        }
+      }
+
+      if (!contentText && attachments.length) {
+        if (/反馈/.test(compact)) addFeedback("", attachments);
+        else if (/最终|结果|提交|交付/.test(compact)) addFinal("", attachments);
+        else addProcess("", attachments);
+      }
 
       return result;
     }
@@ -961,7 +1104,7 @@
       );
     }
 
-    function TaskModal({ task, isNew, onSave, onDelete, onClose, onSaveAttachmentRecord, aiSettings, onOpenAISettings, quickEntryStart }) {
+    function TaskModal({ task, isNew, onSave, onDelete, onClose, onSaveAttachmentRecord, aiSettings, onOpenAISettings, quickEntryStart, availablePriorityOptions }) {
       const [form, setForm] = useState(task);
       const [quickText, setQuickText] = useState("");
       const [parsedResult, setParsedResult] = useState(null);
@@ -979,6 +1122,7 @@
       const [smartUpdatePreview, setSmartUpdatePreview] = useState(null);
       const [smartUpdateMessage, setSmartUpdateMessage] = useState("");
       const [smartUpdateListening, setSmartUpdateListening] = useState(false);
+      const [priorityOptions, setPriorityOptions] = useState(() => uniquePriorityOptions([...(availablePriorityOptions || []), task.priority]));
       const [openSections, setOpenSections] = useState({ background: false, attachments: false, next: false, feedback: false, process: false, final: false, legacy: false });
       const quickEntryRef = useRef(null);
       useEffect(() => {
@@ -992,22 +1136,41 @@
       }, [quickEntryStart]);
 
       const change = event => setForm({ ...form, [event.target.name]: event.target.value });
+      const changePriority = event => {
+        const value = event.target.value;
+        if (value === ADD_PRIORITY_OPTION) {
+          const customPriority = window.prompt("请输入新的优先级名称，例如：优先级4、老板优先");
+          const normalized = normalizePriority(customPriority);
+          if (!normalized) return;
+          setPriorityOptions(current => uniquePriorityOptions([...current, normalized]));
+          setForm(current => ({ ...current, priority: normalized }));
+          return;
+        }
+        setForm(current => ({ ...current, priority: normalizePriority(value) || "优先级3" }));
+      };
       const backgroundSummary = compactSummary(form.background);
-      const processSummary = compactSummary(form.processNotes);
-      const finalSummary = compactSummary(form.finalResult);
       const nextActionItems = normalizeNextActions(form.nextActions, "", true);
       const feedbackRecordsItems = normalizeFeedbackItems(form.feedbackItems, "", true);
+      const processRecordItems = normalizeProcessItems(form.processItems, "", true);
+      const finalResultItems = normalizeFinalResults(form.finalResults, "", true);
+      const processSummary = compactSummary(processRecordItems[0]?.text);
+      const finalSummary = compactSummary(finalResultItems[0]?.text);
       const submit = event => {
         event.preventDefault();
         if (!form.title.trim()) return;
         const prepared = {
           ...form,
           title: form.title.trim(),
+          priority: normalizePriority(form.priority) || "优先级3",
           nextActions: normalizeNextActions(form.nextActions),
-          feedbackItems: normalizeFeedbackItems(form.feedbackItems)
+          feedbackItems: normalizeFeedbackItems(form.feedbackItems),
+          processItems: normalizeProcessItems(form.processItems),
+          finalResults: normalizeFinalResults(form.finalResults)
         };
         prepared.nextAction = nextActionsToText(prepared.nextActions);
         prepared.feedbackRecords = feedbackItemsToText(prepared.feedbackItems);
+        prepared.processNotes = processItemsToText(prepared.processItems);
+        prepared.finalResult = finalResultsToText(prepared.finalResults);
         onSave(prepared);
       };
 
@@ -1029,26 +1192,32 @@
         if (smartUpdatePreview.nextActions.length) {
           next.nextActions = [
             ...normalizeNextActions(next.nextActions),
-            ...smartUpdatePreview.nextActions.map(text => ({ text, status: "未开始" }))
+            ...smartUpdatePreview.nextActions
           ];
           next.nextAction = nextActionsToText(next.nextActions);
         }
         if (smartUpdatePreview.feedbackItems.length) {
           next.feedbackItems = [
             ...normalizeFeedbackItems(next.feedbackItems),
-            ...smartUpdatePreview.feedbackItems.map(text => ({ text, status: "新反馈" }))
+            ...smartUpdatePreview.feedbackItems
           ];
           next.feedbackRecords = feedbackItemsToText(next.feedbackItems);
         }
-        if (smartUpdatePreview.processNotes) next.processNotes = appendLongText(next.processNotes, smartUpdatePreview.processNotes);
-        if (smartUpdatePreview.finalResult) next.finalResult = appendLongText(next.finalResult, smartUpdatePreview.finalResult);
+        if (smartUpdatePreview.processItems.length) {
+          next.processItems = [...normalizeProcessItems(next.processItems), ...smartUpdatePreview.processItems];
+          next.processNotes = processItemsToText(next.processItems);
+        }
+        if (smartUpdatePreview.finalResults.length) {
+          next.finalResults = [...normalizeFinalResults(next.finalResults), ...smartUpdatePreview.finalResults];
+          next.finalResult = finalResultsToText(next.finalResults);
+        }
         setForm(next);
         setOpenSections(current => ({
           ...current,
           next: current.next || smartUpdatePreview.nextActions.length > 0,
           feedback: current.feedback || smartUpdatePreview.feedbackItems.length > 0,
-          process: current.process || Boolean(smartUpdatePreview.processNotes),
-          final: current.final || Boolean(smartUpdatePreview.finalResult)
+          process: current.process || smartUpdatePreview.processItems.length > 0,
+          final: current.final || smartUpdatePreview.finalResults.length > 0
         }));
         setSmartUpdateText("");
         setSmartUpdatePreview(null);
@@ -1168,7 +1337,7 @@
         setParsing(true);
         setParseMessage("");
         const schema = Object.fromEntries(PARSED_FIELDS.map(([key]) => [key, ""]));
-        const systemPrompt = `You extract task fields from Chinese or English text. Return one JSON object only, with exactly this schema: ${JSON.stringify(schema)}. If information is not explicitly stated, use an empty string. Never invent information. Dates must be YYYY-MM-DD. Today is ${dateKey(new Date())}. Priority must be High, Medium, Low, or empty. Status must be New, To Do, In Progress, Waiting for Feedback, Done, Archived, or empty.`;
+        const systemPrompt = `You extract task fields from Chinese or English text. Return one JSON object only, with exactly this schema: ${JSON.stringify(schema)}. If information is not explicitly stated, use an empty string. Never invent information. Dates must be YYYY-MM-DD. Today is ${dateKey(new Date())}. Priority must be 优先级1, 优先级2, 优先级3, an explicit custom priority such as 优先级4, or empty. Status must be New, To Do, In Progress, Waiting for Feedback, Done, Archived, or empty.`;
         try {
           const response = await fetch(aiSettings.endpoint, {
             method: "POST",
@@ -1288,7 +1457,7 @@
         nextActions[index] = { ...nextActions[index], [field]: value };
         setForm({ ...form, nextActions, nextAction: nextActionsToText(nextActions) });
       };
-      const addNextAction = () => setForm(current => ({ ...current, nextActions: [...normalizeNextActions(current.nextActions), { text: "", status: "未开始" }] }));
+      const addNextAction = () => setForm(current => ({ ...current, nextActions: [...normalizeNextActions(current.nextActions), { id: makeRowId("next"), text: "", dueText: "", status: "未开始" }] }));
       const deleteNextAction = index => {
         const nextActions = normalizeNextActions(form.nextActions, "", true).filter((_, itemIndex) => itemIndex !== index);
         setForm({ ...form, nextActions, nextAction: nextActionsToText(nextActions) });
@@ -1299,11 +1468,88 @@
         feedbackItems[index] = { ...feedbackItems[index], [field]: value };
         setForm({ ...form, feedbackItems, feedbackRecords: feedbackItemsToText(feedbackItems) });
       };
-      const addFeedbackItem = () => setForm(current => ({ ...current, feedbackItems: [...normalizeFeedbackItems(current.feedbackItems), { text: "", status: "新反馈" }] }));
+      const addFeedbackItem = () => setForm(current => ({ ...current, feedbackItems: [...normalizeFeedbackItems(current.feedbackItems), { id: makeRowId("feedback"), text: "", createdAt: todayTimeText(), attachments: [], status: "新反馈" }] }));
       const deleteFeedbackItem = index => {
         const feedbackItems = normalizeFeedbackItems(form.feedbackItems, "", true).filter((_, itemIndex) => itemIndex !== index);
         setForm({ ...form, feedbackItems, feedbackRecords: feedbackItemsToText(feedbackItems) });
       };
+
+      const updateProcessItem = (index, field, value) => {
+        const processItems = normalizeProcessItems(form.processItems, "", true);
+        processItems[index] = { ...processItems[index], [field]: value };
+        setForm({ ...form, processItems, processNotes: processItemsToText(processItems) });
+      };
+      const addProcessItem = () => setForm(current => ({ ...current, processItems: [...normalizeProcessItems(current.processItems), { id: makeRowId("process"), text: "", createdAt: todayTimeText(), attachments: [] }] }));
+      const deleteProcessItem = index => {
+        const processItems = normalizeProcessItems(form.processItems, "", true).filter((_, itemIndex) => itemIndex !== index);
+        setForm({ ...form, processItems, processNotes: processItemsToText(processItems) });
+      };
+
+      const updateFinalResultItem = (index, field, value) => {
+        const finalResults = normalizeFinalResults(form.finalResults, "", true);
+        finalResults[index] = { ...finalResults[index], [field]: value };
+        setForm({ ...form, finalResults, finalResult: finalResultsToText(finalResults) });
+      };
+      const addFinalResultItem = () => setForm(current => ({ ...current, finalResults: [...normalizeFinalResults(current.finalResults), { id: makeRowId("final"), text: "", createdAt: todayTimeText(), attachments: [] }] }));
+      const deleteFinalResultItem = index => {
+        const finalResults = normalizeFinalResults(form.finalResults, "", true).filter((_, itemIndex) => itemIndex !== index);
+        setForm({ ...form, finalResults, finalResult: finalResultsToText(finalResults) });
+      };
+
+      const addRowAttachments = (section, index) => {
+        const pasted = window.prompt("粘贴文件链接或包含文件名的整段文字");
+        const links = parseAttachmentLinks(pasted || "");
+        if (!links.length) {
+          setAttachmentMessage("没有识别到附件链接。");
+          return;
+        }
+        if (section === "feedback") {
+          const feedbackItems = normalizeFeedbackItems(form.feedbackItems, "", true);
+          feedbackItems[index] = { ...feedbackItems[index], attachments: [...(feedbackItems[index]?.attachments || []), ...links] };
+          setForm({ ...form, feedbackItems, feedbackRecords: feedbackItemsToText(feedbackItems) });
+        }
+        if (section === "process") {
+          const processItems = normalizeProcessItems(form.processItems, "", true);
+          processItems[index] = { ...processItems[index], attachments: [...(processItems[index]?.attachments || []), ...links] };
+          setForm({ ...form, processItems, processNotes: processItemsToText(processItems) });
+        }
+        if (section === "final") {
+          const finalResults = normalizeFinalResults(form.finalResults, "", true);
+          finalResults[index] = { ...finalResults[index], attachments: [...(finalResults[index]?.attachments || []), ...links] };
+          setForm({ ...form, finalResults, finalResult: finalResultsToText(finalResults) });
+        }
+      };
+
+      const deleteRowAttachment = (section, rowIndex, attachmentId) => {
+        if (!window.confirm("只会删除这个记录里的附件链接，不会删除云端原文件。确定删除吗？")) return;
+        if (section === "feedback") {
+          const feedbackItems = normalizeFeedbackItems(form.feedbackItems, "", true);
+          feedbackItems[rowIndex] = { ...feedbackItems[rowIndex], attachments: (feedbackItems[rowIndex]?.attachments || []).filter(item => item.id !== attachmentId) };
+          setForm({ ...form, feedbackItems, feedbackRecords: feedbackItemsToText(feedbackItems) });
+        }
+        if (section === "process") {
+          const processItems = normalizeProcessItems(form.processItems, "", true);
+          processItems[rowIndex] = { ...processItems[rowIndex], attachments: (processItems[rowIndex]?.attachments || []).filter(item => item.id !== attachmentId) };
+          setForm({ ...form, processItems, processNotes: processItemsToText(processItems) });
+        }
+        if (section === "final") {
+          const finalResults = normalizeFinalResults(form.finalResults, "", true);
+          finalResults[rowIndex] = { ...finalResults[rowIndex], attachments: (finalResults[rowIndex]?.attachments || []).filter(item => item.id !== attachmentId) };
+          setForm({ ...form, finalResults, finalResult: finalResultsToText(finalResults) });
+        }
+      };
+
+      const renderRowAttachments = (items, section, rowIndex) => (
+        <div>
+          {(items || []).map(attachment => (
+            <span key={attachment.id} className="row-attachment-link">
+              <a href={attachment.fileUrl} target="_blank" rel="noopener noreferrer">{attachment.fileName}</a>
+              <button type="button" className="attachment-action danger" onClick={() => deleteRowAttachment(section, rowIndex, attachment.id)}>删除记录</button>
+            </span>
+          ))}
+          <button type="button" className="attachment-action" onClick={() => addRowAttachments(section, rowIndex)}>添加附件链接</button>
+        </div>
+      );
 
       return (
         <div className="modal-backdrop" onMouseDown={event => event.target === event.currentTarget && onClose()}>
@@ -1359,10 +1605,11 @@
                       <div className="smart-preview">
                         <h4>将添加到：</h4>
                         <ul>
-                          {smartUpdatePreview.feedbackItems.map((item, index) => <li key={`feedback-${index}`}>反馈记录：{item}</li>)}
-                          {smartUpdatePreview.nextActions.map((item, index) => <li key={`next-${index}`}>下一步动作：{item}</li>)}
-                          {smartUpdatePreview.processNotes && <li>工作流程说明：{smartUpdatePreview.processNotes}</li>}
-                          {smartUpdatePreview.finalResult && <li>最终结果：{smartUpdatePreview.finalResult}</li>}
+                          {smartUpdatePreview.feedbackItems.map((item, index) => <li key={`feedback-${index}`}>反馈记录：{item.text || "仅附件"}</li>)}
+                          {smartUpdatePreview.nextActions.map((item, index) => <li key={`next-${index}`}>下一步动作：{item.dueText ? `${item.dueText} / ` : ""}{item.text}</li>)}
+                          {smartUpdatePreview.processItems.map((item, index) => <li key={`process-${index}`}>工作流程说明：{item.text || "仅附件"}</li>)}
+                          {smartUpdatePreview.finalResults.map((item, index) => <li key={`final-${index}`}>最终结果：{item.text || "仅附件"}</li>)}
+                          {smartUpdatePreview.attachments.length > 0 && <li>相关附件：{smartUpdatePreview.attachments.map(item => item.fileName).join("、")}</li>}
                         </ul>
                         <div className="quick-actions"><button type="button" className="btn btn-primary" onClick={applySmartUpdate}>应用补充内容</button></div>
                       </div>
@@ -1401,9 +1648,10 @@
                   <input id="deadline" type="date" name="deadline" value={form.deadline} onChange={change} />
                 </div>
                 <div className="field">
-                  <label htmlFor="priority">Priority</label>
-                  <select id="priority" name="priority" value={form.priority} onChange={change}>
-                    {PRIORITIES.map(priority => <option key={priority}>{priority}</option>)}
+                  <label htmlFor="priority">优先级</label>
+                  <select id="priority" name="priority" value={normalizePriority(form.priority) || "优先级3"} onChange={changePriority}>
+                    {priorityOptions.map(priority => <option key={priority} value={priority}>{priority}</option>)}
+                    <option value={ADD_PRIORITY_OPTION}>+ 新增优先级</option>
                   </select>
                 </div>
                 <div className="field">
@@ -1488,11 +1736,12 @@
                     <div className="section-content">
                       <div className="structured-table-wrap">
                         <table className="structured-table">
-                          <thead><tr><th>序号</th><th>下一步动作</th><th>状态</th><th>删除</th></tr></thead>
+                          <thead><tr><th>序号</th><th>时间/期限</th><th>下一步动作</th><th>状态</th><th>删除</th></tr></thead>
                           <tbody>
                             {nextActionItems.map((item, index) => (
                               <tr key={index}>
                                 <td className="structured-index">{index + 1}</td>
+                                <td><input value={item.dueText} onChange={event => updateNextAction(index, "dueText", event.target.value)} placeholder="如：明天" /></td>
                                 <td><input value={item.text} onChange={event => updateNextAction(index, "text", event.target.value)} placeholder="填写下一步动作" /></td>
                                 <td>
                                   <select value={item.status} onChange={event => updateNextAction(index, "status", event.target.value)}>
@@ -1502,7 +1751,7 @@
                                 <td><button type="button" className="attachment-action danger" onClick={() => deleteNextAction(index)}>Delete</button></td>
                               </tr>
                             ))}
-                            {!nextActionItems.length && <tr><td colSpan="4">还没有下一步动作。</td></tr>}
+                            {!nextActionItems.length && <tr><td colSpan="5">还没有下一步动作。</td></tr>}
                           </tbody>
                         </table>
                       </div>
@@ -1519,12 +1768,14 @@
                     <div className="section-content">
                       <div className="structured-table-wrap">
                         <table className="structured-table">
-                          <thead><tr><th>序号</th><th>反馈内容</th><th>状态</th><th>删除</th></tr></thead>
+                          <thead><tr><th>序号</th><th>时间</th><th>反馈内容</th><th>相关附件</th><th>状态</th><th>删除</th></tr></thead>
                           <tbody>
                             {feedbackRecordsItems.map((item, index) => (
                               <tr key={index}>
                                 <td className="structured-index">{index + 1}</td>
-                                <td><input value={item.text} onChange={event => updateFeedbackItem(index, "text", event.target.value)} placeholder="填写反馈内容" /></td>
+                                <td><input value={item.createdAt} onChange={event => updateFeedbackItem(index, "createdAt", event.target.value)} placeholder="时间" /></td>
+                                <td><textarea value={item.text} onChange={event => updateFeedbackItem(index, "text", event.target.value)} placeholder="填写反馈内容" /></td>
+                                <td>{renderRowAttachments(item.attachments, "feedback", index)}</td>
                                 <td>
                                   <select value={item.status} onChange={event => updateFeedbackItem(index, "status", event.target.value)}>
                                     <option>新反馈</option><option>处理中</option><option>已解决</option>
@@ -1533,7 +1784,7 @@
                                 <td><button type="button" className="attachment-action danger" onClick={() => deleteFeedbackItem(index)}>Delete</button></td>
                               </tr>
                             ))}
-                            {!feedbackRecordsItems.length && <tr><td colSpan="4">还没有反馈记录。</td></tr>}
+                            {!feedbackRecordsItems.length && <tr><td colSpan="6">还没有反馈记录。</td></tr>}
                           </tbody>
                         </table>
                       </div>
@@ -1544,16 +1795,58 @@
                 <section className="collapsible-section">
                   <button type="button" className="section-toggle" onClick={() => toggleSection("process")}>
                     <span className="section-title">工作流程说明 <span className="section-summary">{processSummary}</span></span>
-                    <span>{form.processNotes ? "有内容" : "空"}</span>
+                    <span>{processRecordItems.length}条</span>
                   </button>
-                  {openSections.process && <div className="section-content"><textarea className="long" id="processNotes" name="processNotes" value={form.processNotes} onChange={change} placeholder="Add dated notes about decisions, progress, conversations, or blockers…" /></div>}
+                  {openSections.process && (
+                    <div className="section-content">
+                      <div className="structured-table-wrap">
+                        <table className="structured-table">
+                          <thead><tr><th>序号</th><th>时间</th><th>过程记录</th><th>相关附件</th><th>删除</th></tr></thead>
+                          <tbody>
+                            {processRecordItems.map((item, index) => (
+                              <tr key={index}>
+                                <td className="structured-index">{index + 1}</td>
+                                <td><input value={item.createdAt} onChange={event => updateProcessItem(index, "createdAt", event.target.value)} placeholder="时间" /></td>
+                                <td><textarea value={item.text} onChange={event => updateProcessItem(index, "text", event.target.value)} placeholder="填写过程记录" /></td>
+                                <td>{renderRowAttachments(item.attachments, "process", index)}</td>
+                                <td><button type="button" className="attachment-action danger" onClick={() => deleteProcessItem(index)}>Delete</button></td>
+                              </tr>
+                            ))}
+                            {!processRecordItems.length && <tr><td colSpan="5">还没有工作流程说明。</td></tr>}
+                          </tbody>
+                        </table>
+                      </div>
+                      <div className="quick-actions"><button type="button" className="btn btn-secondary" onClick={addProcessItem}>Add process record</button></div>
+                    </div>
+                  )}
                 </section>
                 <section className="collapsible-section">
                   <button type="button" className="section-toggle" onClick={() => toggleSection("final")}>
                     <span className="section-title">最终结果 <span className="section-summary">{finalSummary}</span></span>
-                    <span>{form.finalResult ? "有内容" : "空"}</span>
+                    <span>{finalResultItems.length}条</span>
                   </button>
-                  {openSections.final && <div className="section-content"><textarea className="long" id="finalResult" name="finalResult" value={form.finalResult} onChange={change} placeholder="What was delivered or achieved? Add the outcome when the task is complete." /></div>}
+                  {openSections.final && (
+                    <div className="section-content">
+                      <div className="structured-table-wrap">
+                        <table className="structured-table">
+                          <thead><tr><th>序号</th><th>时间</th><th>结果内容</th><th>相关附件</th><th>删除</th></tr></thead>
+                          <tbody>
+                            {finalResultItems.map((item, index) => (
+                              <tr key={index}>
+                                <td className="structured-index">{index + 1}</td>
+                                <td><input value={item.createdAt} onChange={event => updateFinalResultItem(index, "createdAt", event.target.value)} placeholder="时间" /></td>
+                                <td><textarea value={item.text} onChange={event => updateFinalResultItem(index, "text", event.target.value)} placeholder="填写结果内容" /></td>
+                                <td>{renderRowAttachments(item.attachments, "final", index)}</td>
+                                <td><button type="button" className="attachment-action danger" onClick={() => deleteFinalResultItem(index)}>Delete</button></td>
+                              </tr>
+                            ))}
+                            {!finalResultItems.length && <tr><td colSpan="5">还没有最终结果。</td></tr>}
+                          </tbody>
+                        </table>
+                      </div>
+                      <div className="quick-actions"><button type="button" className="btn btn-secondary" onClick={addFinalResultItem}>Add result record</button></div>
+                    </div>
+                  )}
                 </section>
                 {form.links && (
                   <section className="collapsible-section">
@@ -1581,7 +1874,7 @@
           <button className="card-delete" aria-label={`Delete ${task.title}`} onClick={event => { event.stopPropagation(); onDelete(task.id); }}>×</button>
           <h3 className="card-title">{task.title}</h3>
           <div className="card-meta">
-            <span className={`pill priority-${task.priority.toLowerCase()}`}>{task.priority}</span>
+            <span className={`pill ${priorityClass(task.priority)}`}>{normalizePriority(task.priority) || "优先级3"}</span>
             {task.project && <span className="pill">{task.project}</span>}
             {attachmentCount(task) > 0 && <span className="pill">{attachmentCount(task)} file{attachmentCount(task) === 1 ? "" : "s"}</span>}
           </div>
@@ -1625,17 +1918,17 @@
       const [sortDirection, setSortDirection] = useState("desc");
 
       const projects = useMemo(() => [...new Set(tasks.map(task => task.project.trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b)), [tasks]);
+      const priorityOptions = useMemo(() => uniquePriorityOptions(tasks.map(task => task.priority)), [tasks]);
 
       const filteredTasks = useMemo(() => {
         const keyword = search.trim().toLowerCase();
-        const priorityOrder = { Low: 1, Medium: 2, High: 3 };
         const statusOrder = Object.fromEntries(COLUMNS.map((column, index) => [column.id, index]));
         const valueForSort = task => {
           if (sortBy === "createdAt") return createdDate(task)?.getTime() || 0;
           if (sortBy === "deadline") return toDate(task.deadline)?.getTime() || 0;
           if (sortBy === "updatedAt") return toDate(task.updatedAt)?.getTime() || 0;
           if (sortBy === "status") return statusOrder[task.status] ?? 99;
-          if (sortBy === "priority") return priorityOrder[task.priority] || 0;
+          if (sortBy === "priority") return priorityRank(task.priority);
           return 0;
         };
 
@@ -1659,6 +1952,7 @@
             const first = valueForSort(a);
             const second = valueForSort(b);
             const difference = typeof first === "string" ? first.localeCompare(second) : first - second;
+            if (sortBy === "priority") return difference || a.title.localeCompare(b.title);
             return (sortDirection === "asc" ? difference : -difference) || a.title.localeCompare(b.title);
           });
       }, [tasks, search, status, project, priority, dateFrom, dateTo, unfinishedOnly, feedbackOnly, attachmentFilter, sortBy, sortDirection]);
@@ -1692,10 +1986,10 @@
               </select>
             </div>
             <div className="filter-field">
-              <label htmlFor="priorityFilter">Priority</label>
+              <label htmlFor="priorityFilter">优先级</label>
               <select id="priorityFilter" value={priority} onChange={event => setPriority(event.target.value)}>
-                <option value="">All priorities</option>
-                {PRIORITIES.map(item => <option key={item}>{item}</option>)}
+                <option value="">全部优先级</option>
+                {priorityOptions.map(item => <option key={item} value={item}>{item}</option>)}
               </select>
             </div>
             <div className="date-filters">
@@ -1723,7 +2017,7 @@
                   <option value="deadline">Due date</option>
                   <option value="updatedAt">Last updated</option>
                   <option value="status">Status</option>
-                  <option value="priority">Priority</option>
+                  <option value="priority">优先级</option>
                 </select>
               </div>
               <button className="btn btn-secondary sort-direction" onClick={() => setSortDirection(current => current === "asc" ? "desc" : "asc")}>{sortDirection === "asc" ? "Ascending" : "Descending"}</button>
@@ -1734,7 +2028,7 @@
 
           <div className="task-table-wrap">
             <table className="task-table">
-              <thead><tr><th>Title</th><th>Status</th><th>Project / Category</th><th>Task source</th><th>Priority</th><th>Files</th><th>Next</th><th>Feedback</th><th>Created date</th><th>Due date</th><th>Last updated</th><th>Final result / summary</th></tr></thead>
+              <thead><tr><th>Title</th><th>Status</th><th>Project / Category</th><th>Task source</th><th>优先级</th><th>Files</th><th>Next</th><th>Feedback</th><th>Created date</th><th>Due date</th><th>Last updated</th><th>Final result / summary</th></tr></thead>
               <tbody>
                 {filteredTasks.map(task => (
                   <tr key={task.id} tabIndex="0" onClick={() => onOpen(task)} onKeyDown={event => openFromKeyboard(event, task)}>
@@ -1742,7 +2036,7 @@
                     <td>{statusTitle(task.status)}</td>
                     <td>{task.project || "—"}</td>
                     <td>{task.source || "—"}</td>
-                    <td><span className={`pill priority-${task.priority.toLowerCase()}`}>{task.priority}</span></td>
+                    <td><span className={`pill ${priorityClass(task.priority)}`}>{normalizePriority(task.priority) || "优先级3"}</span></td>
                     <td>{attachmentCount(task)}</td>
                     <td>{normalizeNextActions(task.nextActions, task.nextAction).length}</td>
                     <td>{normalizeFeedbackItems(task.feedbackItems, task.feedbackRecords).length}</td>
@@ -1762,7 +2056,7 @@
                 <h3>{task.title}</h3>
                 <div className="mobile-task-meta">
                   <span className="pill">{statusTitle(task.status)}</span>
-                  <span className={`pill priority-${task.priority.toLowerCase()}`}>{task.priority}</span>
+                  <span className={`pill ${priorityClass(task.priority)}`}>{normalizePriority(task.priority) || "优先级3"}</span>
                   {task.project && <span className="pill">{task.project}</span>}
                   {attachmentCount(task) > 0 && <span className="pill">{attachmentCount(task)} file{attachmentCount(task) === 1 ? "" : "s"}</span>}
                   {normalizeNextActions(task.nextActions, task.nextAction).length > 0 && <span className="pill">{normalizeNextActions(task.nextActions, task.nextAction).length} next</span>}
@@ -2000,6 +2294,7 @@
 
       const activeCount = tasks.filter(task => !["done", "archived"].includes(task.status)).length;
       const doneCount = tasks.filter(task => task.status === "done").length;
+      const availablePriorityOptions = uniquePriorityOptions(tasks.map(task => task.priority));
 
       const statusClass = syncStatus === "Synced" ? "synced" : syncStatus === "Syncing" ? "syncing" : syncStatus === "Sync failed" ? "failed" : "";
 
@@ -2069,7 +2364,7 @@
               )}
             </>
           )}
-          {editing && <TaskModal task={editing} isNew={isNew} onSave={saveTask} onDelete={deleteTask} onClose={() => setEditing(null)} onSaveAttachmentRecord={saveAttachmentRecord} aiSettings={aiSettings} onOpenAISettings={() => setShowAISettings(true)} quickEntryStart={quickEntryStart} />}
+          {editing && <TaskModal task={editing} isNew={isNew} onSave={saveTask} onDelete={deleteTask} onClose={() => setEditing(null)} onSaveAttachmentRecord={saveAttachmentRecord} aiSettings={aiSettings} onOpenAISettings={() => setShowAISettings(true)} quickEntryStart={quickEntryStart} availablePriorityOptions={availablePriorityOptions} />}
           {showAISettings && <AISettingsModal settings={aiSettings} onSave={setAISettings} onClose={() => setShowAISettings(false)} />}
         </>
       );
