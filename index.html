@@ -354,8 +354,9 @@
       appId: "1:270547399087:web:9b2b9fd72bc9c71abe3f5a"
     };
 
+    const placeholderPrefix = ["YOUR", "_"].join("");
     const configured = !Object.values(firebaseConfig).some(
-      value => typeof value === "string" && value.includes("YOUR_")
+      value => typeof value === "string" && value.includes(placeholderPrefix)
     );
 
     try {
@@ -449,6 +450,18 @@
       return Array.isArray(task.attachments) ? task.attachments.length : 0;
     }
 
+    function formatFileSize(bytes) {
+      if (!Number.isFinite(bytes) || bytes <= 0) return "—";
+      const units = ["B", "KB", "MB", "GB"];
+      let size = bytes;
+      let unitIndex = 0;
+      while (size >= 1024 && unitIndex < units.length - 1) {
+        size /= 1024;
+        unitIndex += 1;
+      }
+      return `${size >= 10 || unitIndex === 0 ? Math.round(size) : size.toFixed(1)} ${units[unitIndex]}`;
+    }
+
     function defaultAttachmentName(url) {
       if (/kdocs\.cn|wps\.cn/i.test(url)) return "WPS附件";
       if (/feishu\.cn|larksuite\.com/i.test(url)) return "飞书附件";
@@ -511,6 +524,75 @@
       return String(text || "").replace(dueText || "", "").replace(/^(?:要|先|再|然后|接着|继续|完成|把|将)+/, "").trim();
     }
 
+    function cleanExecutionStep(text) {
+      return String(text || "")
+        .replace(/^(?:要|先|再|然后|接着|继续|把|将)+/, "")
+        .replace(/^(?:今天|明天|后天|本周|下周|周[一二三四五六日天]|星期[一二三四五六日天])(?:前)?/, "")
+        .replace(/^(?:前)?(?:提交|完成|交付)$/, "")
+        .replace(/^(?:前)?(?:提交|完成|交付)(?:给.*)?$/, "")
+        .trim();
+    }
+
+    function isDeadlineOnlyStep(text) {
+      return /^(?:今天|明天|后天|本周|下周|周[一二三四五六日天]|星期[一二三四五六日天])(?:前)?(?:提交|完成|交付)(?:给.*)?$/.test(String(text || "").trim())
+        || /^(?:前)?(?:提交|完成|交付)$/.test(String(text || "").trim());
+    }
+
+    function normalizeNextActions(items, legacyText = "", keepEmpty = false) {
+      if (Array.isArray(items) && items.length) {
+        const prepared = items
+          .map(item => ({
+            id: typeof item === "object" && item?.id ? item.id : makeRowId("next"),
+            text: typeof item === "string" ? item : (item?.text || ""),
+            dueText: typeof item === "object" ? (item?.dueText || "") : "",
+            status: ["未开始", "进行中", "已完成"].includes(item?.status) ? item.status : "未开始"
+          }));
+        return (keepEmpty ? prepared : prepared.filter(item => item.text.trim())).map(item => ({ ...item, text: item.text.trim(), dueText: item.dueText.trim() }));
+      }
+      return legacyText?.trim() ? [{ id: makeRowId("next"), text: legacyText.trim(), dueText: "", status: "未开始" }] : [];
+    }
+
+    function normalizeFeedbackItems(items, legacyText = "", keepEmpty = false) {
+      if (Array.isArray(items) && items.length) {
+        const prepared = items
+          .map(item => ({
+            id: typeof item === "object" && item?.id ? item.id : makeRowId("feedback"),
+            text: typeof item === "string" ? item : (item?.text || ""),
+            createdAt: typeof item === "object" ? (item?.createdAt || "") : "",
+            attachments: typeof item === "object" && Array.isArray(item?.attachments) ? item.attachments.map(normalizeAttachment) : [],
+            status: ["新反馈", "处理中", "已解决"].includes(item?.status) ? item.status : "新反馈"
+          }));
+        return (keepEmpty ? prepared : prepared.filter(item => item.text.trim() || item.attachments.length)).map(item => ({ ...item, text: item.text.trim(), createdAt: item.createdAt.trim() }));
+      }
+      return legacyText?.trim() ? [{ id: makeRowId("feedback"), text: legacyText.trim(), createdAt: "", attachments: [], status: "新反馈" }] : [];
+    }
+
+    function normalizeProcessItems(items, legacyText = "", keepEmpty = false) {
+      if (Array.isArray(items) && items.length) {
+        const prepared = items.map(item => ({
+          id: typeof item === "object" && item?.id ? item.id : makeRowId("process"),
+          text: typeof item === "string" ? item : (item?.text || ""),
+          createdAt: typeof item === "object" ? (item?.createdAt || "") : "",
+          attachments: typeof item === "object" && Array.isArray(item?.attachments) ? item.attachments.map(normalizeAttachment) : []
+        }));
+        return (keepEmpty ? prepared : prepared.filter(item => item.text.trim() || item.attachments.length)).map(item => ({ ...item, text: item.text.trim(), createdAt: item.createdAt.trim() }));
+      }
+      return legacyText?.trim() ? [{ id: makeRowId("process"), text: legacyText.trim(), createdAt: "", attachments: [] }] : [];
+    }
+
+    function normalizeFinalResults(items, legacyText = "", keepEmpty = false) {
+      if (Array.isArray(items) && items.length) {
+        const prepared = items.map(item => ({
+          id: typeof item === "object" && item?.id ? item.id : makeRowId("final"),
+          text: typeof item === "string" ? item : (item?.text || ""),
+          createdAt: typeof item === "object" ? (item?.createdAt || "") : "",
+          attachments: typeof item === "object" && Array.isArray(item?.attachments) ? item.attachments.map(normalizeAttachment) : []
+        }));
+        return (keepEmpty ? prepared : prepared.filter(item => item.text.trim() || item.attachments.length)).map(item => ({ ...item, text: item.text.trim(), createdAt: item.createdAt.trim() }));
+      }
+      return legacyText?.trim() ? [{ id: makeRowId("final"), text: legacyText.trim(), createdAt: "", attachments: [] }] : [];
+    }
+
     function normalizeExecutionItems(items, task = {}, keepEmpty = false) {
       const prepared = [];
       if (Array.isArray(items) && items.length) {
@@ -561,59 +643,6 @@
       }
       return (keepEmpty ? prepared : prepared.filter(item => item.text.trim() || item.attachments.length))
         .map(item => ({ ...item, text: item.text.trim(), createdAt: item.createdAt.trim() }));
-    }
-
-    function normalizeNextActions(items, legacyText = "", keepEmpty = false) {
-      if (Array.isArray(items) && items.length) {
-        const prepared = items.map(item => ({
-          id: typeof item === "object" && item?.id ? item.id : makeRowId("next"),
-          text: typeof item === "string" ? item : (item?.text || ""),
-          dueText: typeof item === "object" ? (item?.dueText || "") : "",
-          status: ["未开始", "进行中", "已完成"].includes(item?.status) ? item.status : "未开始"
-        }));
-        return (keepEmpty ? prepared : prepared.filter(item => item.text.trim())).map(item => ({ ...item, text: item.text.trim(), dueText: item.dueText.trim() }));
-      }
-      return legacyText?.trim() ? [{ id: makeRowId("next"), text: legacyText.trim(), dueText: "", status: "未开始" }] : [];
-    }
-
-    function normalizeFeedbackItems(items, legacyText = "", keepEmpty = false) {
-      if (Array.isArray(items) && items.length) {
-        const prepared = items.map(item => ({
-          id: typeof item === "object" && item?.id ? item.id : makeRowId("feedback"),
-          text: typeof item === "string" ? item : (item?.text || ""),
-          createdAt: typeof item === "object" ? (item?.createdAt || "") : "",
-          attachments: typeof item === "object" && Array.isArray(item?.attachments) ? item.attachments.map(normalizeAttachment) : [],
-          status: ["新反馈", "处理中", "已解决"].includes(item?.status) ? item.status : "新反馈"
-        }));
-        return (keepEmpty ? prepared : prepared.filter(item => item.text.trim() || item.attachments.length)).map(item => ({ ...item, text: item.text.trim(), createdAt: item.createdAt.trim() }));
-      }
-      return legacyText?.trim() ? [{ id: makeRowId("feedback"), text: legacyText.trim(), createdAt: "", attachments: [], status: "新反馈" }] : [];
-    }
-
-    function normalizeProcessItems(items, legacyText = "", keepEmpty = false) {
-      if (Array.isArray(items) && items.length) {
-        const prepared = items.map(item => ({
-          id: typeof item === "object" && item?.id ? item.id : makeRowId("process"),
-          text: typeof item === "string" ? item : (item?.text || ""),
-          createdAt: typeof item === "object" ? (item?.createdAt || "") : "",
-          attachments: typeof item === "object" && Array.isArray(item?.attachments) ? item.attachments.map(normalizeAttachment) : []
-        }));
-        return (keepEmpty ? prepared : prepared.filter(item => item.text.trim() || item.attachments.length)).map(item => ({ ...item, text: item.text.trim(), createdAt: item.createdAt.trim() }));
-      }
-      return legacyText?.trim() ? [{ id: makeRowId("process"), text: legacyText.trim(), createdAt: "", attachments: [] }] : [];
-    }
-
-    function normalizeFinalResults(items, legacyText = "", keepEmpty = false) {
-      if (Array.isArray(items) && items.length) {
-        const prepared = items.map(item => ({
-          id: typeof item === "object" && item?.id ? item.id : makeRowId("final"),
-          text: typeof item === "string" ? item : (item?.text || ""),
-          createdAt: typeof item === "object" ? (item?.createdAt || "") : "",
-          attachments: typeof item === "object" && Array.isArray(item?.attachments) ? item.attachments.map(normalizeAttachment) : []
-        }));
-        return (keepEmpty ? prepared : prepared.filter(item => item.text.trim() || item.attachments.length)).map(item => ({ ...item, text: item.text.trim(), createdAt: item.createdAt.trim() }));
-      }
-      return legacyText?.trim() ? [{ id: makeRowId("final"), text: legacyText.trim(), createdAt: "", attachments: [] }] : [];
     }
 
     function processItemsWithLegacyBackground(task) {
@@ -1154,12 +1183,11 @@
       if (nextBlock?.[1]?.trim()) nextItems.push(nextBlock[1].trim().replace(/[，。；;,.]+$/, ""));
       segments.next.forEach(item => {
         const dueText = extractDueText(item);
-        nextItems.push(`${dueText ? `${dueText} ` : ""}${removeDuePrefix(item.replace(/^(?:下一步|接下来|之后|还要|需要再)(?:是|要|先)?/, ""), dueText)}`.trim());
+        const cleanedStep = cleanExecutionStep(removeDuePrefix(item.replace(/^(?:下一步|接下来|之后|还要|需要再)(?:是|要|先)?/, ""), dueText));
+        if (!isDeadlineOnlyStep(item) && cleanedStep) {
+          nextItems.push(`${dueText && !isDeadlineOnlyStep(item) ? `${dueText} ` : ""}${cleanedStep}`.trim());
+        }
       });
-      if (!nextItems.length && result.dueDate && assignmentPhrase && /(?:明天|后天|今天|周[一二三四五六日天]|星期[一二三四五六日天])/.test(compact)) {
-        const dueText = extractDueText(compact);
-        nextItems.push(`${dueText ? `${dueText} ` : ""}${titleFromAssignmentPhrase(assignmentPhrase, compact)}`.trim());
-      }
       result.nextAction = nextItems.filter(Boolean).join("\n") || firstMatch(compact, [
         /next step(?: is|:)?\s*([^,.;\n]+)/i
       ]);
@@ -1221,7 +1249,10 @@
       if (result.nextAction) {
         splitStructuredItems(result.nextAction).forEach(text => {
           const dueText = extractDueText(text);
-          result.executionItems.push({ id: makeRowId("exec"), text: removeDuePrefix(text, dueText), status: "未开始", dueText, feedbackNote: "", attachments: [] });
+          const cleanedStep = cleanExecutionStep(removeDuePrefix(text, dueText));
+          if (!isDeadlineOnlyStep(text) && cleanedStep) {
+            result.executionItems.push({ id: makeRowId("exec"), text: cleanedStep, status: "未开始", dueText, feedbackNote: "", attachments: [] });
+          }
         });
       }
       const planMatch = compact.match(/(?:我准备|准备|计划|打算)(.+?)(?=老板反馈|领导反馈|客户反馈|反馈|最终|已提交|已经提交|$)/);
@@ -1229,7 +1260,8 @@
         planMatch[1]
           .split(/(?:先|再|然后|最后|，|,|；|;|。)/)
           .map(item => item.trim())
-          .filter(Boolean)
+          .map(cleanExecutionStep)
+          .filter(item => item && !isDeadlineOnlyStep(item))
           .forEach(text => {
             if (!result.executionItems.some(item => item.text === text)) {
               result.executionItems.push({ id: makeRowId("exec"), text, status: "未开始", dueText: "", feedbackNote: "", attachments: [] });
@@ -1355,6 +1387,11 @@
       return result;
     }
 
+    // Rule Parse regression examples:
+    // 老板让我明天跟进俄罗斯水槽说明书修改，项目是俄罗斯水槽，优先级高，目前进行中，下一步整理俄文问题清单
+    // 客户要求后天确认俄罗斯标签内容，项目是包装标签，优先级高，当前待办
+    // 海尔要求今天核对水槽说明书俄文，项目是俄罗斯水槽说明书，目前进行中，下一步输出问题清单
+
     function AISettingsModal({ settings, onSave, onClose }) {
       const [form, setForm] = useState(settings);
       const change = event => setForm({ ...form, [event.target.name]: event.target.value });
@@ -1392,6 +1429,7 @@
       const [form, setForm] = useState(task);
       const [quickText, setQuickText] = useState("");
       const [parsedResult, setParsedResult] = useState(null);
+      const [parseMode, setParseMode] = useState("");
       const [previousForm, setPreviousForm] = useState(null);
       const [parseMessage, setParseMessage] = useState("");
       const [parsing, setParsing] = useState(false);
@@ -1410,7 +1448,6 @@
       const hasBasicInfo = Boolean(task.project || task.source || task.receivedDate || task.deadline || task.priority || task.status);
       const [openSections, setOpenSections] = useState({ basic: !hasBasicInfo, attachments: false, execution: true, final: false, review: false, legacy: false });
       const quickEntryRef = useRef(null);
-
       useEffect(() => {
         const closeOnEscape = event => event.key === "Escape" && onClose();
         window.addEventListener("keydown", closeOnEscape);
@@ -1434,12 +1471,13 @@
         }
         setForm(current => ({ ...current, priority: normalizePriority(value) || "优先级3" }));
       };
-      const executionChecklistItems = normalizeExecutionItems(form.executionItems, form, true);
+      const executionChecklistItems = Array.isArray(form.executionItems)
+        ? normalizeExecutionItems(form.executionItems, form, true)
+        : normalizeExecutionItems([], form, true);
       const finalResultItems = normalizeFinalResults(form.finalResults, "", true);
       const reviewSummaryItems = normalizeReviewItems(form.reviewItems, form, true);
       const finalSummary = compactSummary(finalResultItems[0]?.text);
       const basicSummary = [form.project, form.source, form.receivedDate, form.deadline, normalizePriority(form.priority), statusTitle(form.status)].filter(Boolean).join("｜");
-
       const submit = event => {
         event.preventDefault();
         if (!form.title.trim()) return;
@@ -1519,9 +1557,10 @@
         setSmartUpdateMessage("补充内容已加入表单。请点击 Save task 保存同步。");
       };
 
-      const fillParsedResult = result => {
+      const fillParsedResult = (result, mode = "规则解析模式", message = "") => {
         setPreviousForm(form);
         setParsedResult(result);
+        setParseMode(mode);
         const next = { ...form };
         const mapping = {
           title: "title", source: "source", project: "project",
@@ -1548,17 +1587,23 @@
         if (result.nextAction) {
           const items = splitStructuredItems(result.nextAction);
           const preparedItems = items.length ? items : [result.nextAction];
-          next.nextActions = preparedItems.map(text => {
+          const generatedExecutionItems = preparedItems.map(text => {
             const dueText = extractDueText(text);
-            return { id: makeRowId("next"), text: removeDuePrefix(text, dueText), dueText, status: "未开始" };
-          });
-          next.nextAction = nextActionsToText(next.nextActions);
-          setOpenSections(current => ({ ...current, next: true }));
-        }
-        if (result.executionItems?.length) {
+            return { id: makeRowId("exec"), text: cleanExecutionStep(removeDuePrefix(text, dueText)), dueText, status: "未开始", feedbackNote: "", attachments: [] };
+          }).filter(item => item.text && !isDeadlineOnlyStep(item.text));
+          next.nextActions = generatedExecutionItems.map(item => ({ id: makeRowId("next"), text: item.text, dueText: item.dueText, status: item.status }));
           next.executionItems = [
             ...normalizeExecutionItems(next.executionItems, next),
-            ...result.executionItems
+            ...generatedExecutionItems.filter(item => !normalizeExecutionItems(next.executionItems, next).some(existing => existing.text === item.text))
+          ];
+          next.nextAction = nextActionsToText(next.nextActions);
+          setOpenSections(current => ({ ...current, execution: true }));
+        }
+        if (result.executionItems?.length) {
+          const existingExecutionItems = normalizeExecutionItems(next.executionItems, next);
+          next.executionItems = [
+            ...existingExecutionItems,
+            ...result.executionItems.filter(item => !existingExecutionItems.some(existing => existing.text === item.text && existing.dueText === item.dueText))
           ];
           setOpenSections(current => ({ ...current, execution: true }));
         }
@@ -1585,13 +1630,14 @@
           setOpenSections(current => ({ ...current, review: true }));
         }
         setForm(next);
-        setParseMessage("Parsed values have been filled. You can edit them before saving.");
+        setParseMessage(message || "Parsed values have been filled. You can edit them before saving.");
       };
 
       const undoParsedFill = () => {
         if (!previousForm) return;
         setForm(previousForm);
         setPreviousForm(null);
+        setParseMode("");
         setParseMessage("Parsed fill was undone.");
       };
 
@@ -1656,16 +1702,24 @@
           setParseMessage("Enter or dictate a task description first.");
           return;
         }
-        fillParsedResult(ruleParse(quickText));
+        fillParsedResult(
+          ruleParse(quickText),
+          "规则解析模式",
+          "当前为规则解析模式，结果仅供临时参考。建议配置 AI 后再测试智能拆解。"
+        );
       };
 
       const parseWithAI = async () => {
-        if (!aiSettings.endpoint || !aiSettings.apiKey || !aiSettings.model) {
-          setParseMessage("AI is not configured yet. Please add your API endpoint and API key in settings.");
-          return;
-        }
         if (!quickText.trim()) {
           setParseMessage("Enter or dictate a task description first.");
+          return;
+        }
+        if (!aiSettings.endpoint || !aiSettings.apiKey || !aiSettings.model) {
+          fillParsedResult(
+            ruleParse(quickText),
+            "规则解析模式",
+            "AI未配置，请先设置AI接口。当前为规则解析模式，结果仅供临时参考。建议配置 AI 后再测试智能拆解。"
+          );
           return;
         }
 
@@ -1695,7 +1749,7 @@
           }
           if (typeof content === "object") content = JSON.stringify(content);
           content = String(content || "").replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
-          fillParsedResult(normalizeParsedResult(JSON.parse(content)));
+          fillParsedResult(normalizeParsedResult(JSON.parse(content)), "AI解析模式");
         } catch (error) {
           console.error("AI parsing failed", error);
           setParseMessage(`AI Parse failed: ${error.message}. Check the endpoint, model, key, and browser CORS support.`);
@@ -1708,6 +1762,7 @@
         setQuickText("");
         setParsedResult(null);
         setPreviousForm(null);
+        setParseMode("");
         setParseMessage("");
         quickEntryRef.current?.focus();
       };
@@ -1787,6 +1842,17 @@
         recognition.start();
       };
 
+      const updateNextAction = (index, field, value) => {
+        const nextActions = normalizeNextActions(form.nextActions, "", true);
+        nextActions[index] = { ...nextActions[index], [field]: value };
+        setForm({ ...form, nextActions, nextAction: nextActionsToText(nextActions) });
+      };
+      const addNextAction = () => setForm(current => ({ ...current, nextActions: [...normalizeNextActions(current.nextActions), { id: makeRowId("next"), text: "", dueText: "", status: "未开始" }] }));
+      const deleteNextAction = index => {
+        const nextActions = normalizeNextActions(form.nextActions, "", true).filter((_, itemIndex) => itemIndex !== index);
+        setForm({ ...form, nextActions, nextAction: nextActionsToText(nextActions) });
+      };
+
       const updateExecutionItem = (index, field, value) => {
         const executionItems = normalizeExecutionItems(form.executionItems, form, true);
         executionItems[index] = { ...executionItems[index], [field]: value };
@@ -1796,6 +1862,28 @@
       const deleteExecutionItem = index => {
         const executionItems = normalizeExecutionItems(form.executionItems, form, true).filter((_, itemIndex) => itemIndex !== index);
         setForm({ ...form, executionItems });
+      };
+
+      const updateFeedbackItem = (index, field, value) => {
+        const feedbackItems = normalizeFeedbackItems(form.feedbackItems, "", true);
+        feedbackItems[index] = { ...feedbackItems[index], [field]: value };
+        setForm({ ...form, feedbackItems, feedbackRecords: feedbackItemsToText(feedbackItems) });
+      };
+      const addFeedbackItem = () => setForm(current => ({ ...current, feedbackItems: [...normalizeFeedbackItems(current.feedbackItems), { id: makeRowId("feedback"), text: "", createdAt: todayTimeText(), attachments: [], status: "新反馈" }] }));
+      const deleteFeedbackItem = index => {
+        const feedbackItems = normalizeFeedbackItems(form.feedbackItems, "", true).filter((_, itemIndex) => itemIndex !== index);
+        setForm({ ...form, feedbackItems, feedbackRecords: feedbackItemsToText(feedbackItems) });
+      };
+
+      const updateProcessItem = (index, field, value) => {
+        const processItems = normalizeProcessItems(form.processItems, "", true);
+        processItems[index] = { ...processItems[index], [field]: value };
+        setForm({ ...form, processItems, processNotes: processItemsToText(processItems) });
+      };
+      const addProcessItem = () => setForm(current => ({ ...current, processItems: [...normalizeProcessItems(current.processItems), { id: makeRowId("process"), text: "", createdAt: todayTimeText(), attachments: [] }] }));
+      const deleteProcessItem = index => {
+        const processItems = normalizeProcessItems(form.processItems, "", true).filter((_, itemIndex) => itemIndex !== index);
+        setForm({ ...form, processItems, processNotes: processItemsToText(processItems) });
       };
 
       const updateFinalResultItem = (index, field, value) => {
@@ -1827,10 +1915,20 @@
           setAttachmentMessage("没有识别到附件链接。");
           return;
         }
+        if (section === "feedback") {
+          const feedbackItems = normalizeFeedbackItems(form.feedbackItems, "", true);
+          feedbackItems[index] = { ...feedbackItems[index], attachments: [...(feedbackItems[index]?.attachments || []), ...links] };
+          setForm({ ...form, feedbackItems, feedbackRecords: feedbackItemsToText(feedbackItems) });
+        }
         if (section === "execution") {
           const executionItems = normalizeExecutionItems(form.executionItems, form, true);
           executionItems[index] = { ...executionItems[index], attachments: [...(executionItems[index]?.attachments || []), ...links] };
           setForm({ ...form, executionItems });
+        }
+        if (section === "process") {
+          const processItems = normalizeProcessItems(form.processItems, "", true);
+          processItems[index] = { ...processItems[index], attachments: [...(processItems[index]?.attachments || []), ...links] };
+          setForm({ ...form, processItems, processNotes: processItemsToText(processItems) });
         }
         if (section === "final") {
           const finalResults = normalizeFinalResults(form.finalResults, "", true);
@@ -1846,10 +1944,20 @@
 
       const deleteRowAttachment = (section, rowIndex, attachmentId) => {
         if (!window.confirm("只会删除这个记录里的附件链接，不会删除云端原文件。确定删除吗？")) return;
+        if (section === "feedback") {
+          const feedbackItems = normalizeFeedbackItems(form.feedbackItems, "", true);
+          feedbackItems[rowIndex] = { ...feedbackItems[rowIndex], attachments: (feedbackItems[rowIndex]?.attachments || []).filter(item => item.id !== attachmentId) };
+          setForm({ ...form, feedbackItems, feedbackRecords: feedbackItemsToText(feedbackItems) });
+        }
         if (section === "execution") {
           const executionItems = normalizeExecutionItems(form.executionItems, form, true);
           executionItems[rowIndex] = { ...executionItems[rowIndex], attachments: (executionItems[rowIndex]?.attachments || []).filter(item => item.id !== attachmentId) };
           setForm({ ...form, executionItems });
+        }
+        if (section === "process") {
+          const processItems = normalizeProcessItems(form.processItems, "", true);
+          processItems[rowIndex] = { ...processItems[rowIndex], attachments: (processItems[rowIndex]?.attachments || []).filter(item => item.id !== attachmentId) };
+          setForm({ ...form, processItems, processNotes: processItemsToText(processItems) });
         }
         if (section === "final") {
           const finalResults = normalizeFinalResults(form.finalResults, "", true);
@@ -1906,7 +2014,7 @@
                     {parseMessage && <p className="parse-message">{parseMessage}</p>}
                     {parsedResult && (
                       <div className="parsed-preview">
-                        <h4>Parsed result preview</h4>
+                        <h4>Parsed result preview · {parseMode || "解析模式未确定"}</h4>
                         <div className="preview-grid">
                           {PARSED_FIELDS.filter(([key]) => parsedResult[key]).map(([key, label]) => (
                             <div className="preview-item" key={key}><strong>{label}:</strong> {key === "status" ? statusTitle(parsedResult[key]) : parsedResult[key]}</div>
