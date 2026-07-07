@@ -218,7 +218,7 @@
     .sort-direction { min-width: 92px; }
     .results-summary { margin: 0 0 .65rem; color: var(--muted); font-size: .76rem; }
     .task-table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); }
-    .task-table { width: 100%; min-width: 1120px; border-collapse: collapse; }
+    .task-table { width: 100%; min-width: 1200px; border-collapse: collapse; }
     .task-table th { padding: .7rem .75rem; border-bottom: 1px solid var(--border); background: var(--surface-soft); color: #475467; font-size: .7rem; text-align: left; white-space: nowrap; }
     .task-table td { max-width: 220px; padding: .72rem .75rem; border-bottom: 1px solid #edf0f3; color: #475467; font-size: .76rem; vertical-align: top; }
     .task-table tbody tr { cursor: pointer; }
@@ -242,6 +242,20 @@
     .preview-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .4rem .8rem; }
     .preview-item { min-width: 0; color: #475467; font-size: .73rem; line-height: 1.4; word-break: break-word; }
     .preview-item strong { color: var(--text); }
+    .attachments-section { grid-column: 1 / -1; padding: 1rem; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-soft); }
+    .attachments-header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: .75rem; }
+    .attachments-header h3 { margin: 0; font-size: .95rem; }
+    .attachments-header p { margin: .2rem 0 0; color: var(--muted); font-size: .73rem; }
+    .file-input { display: none; }
+    .attachment-message { margin: .65rem 0 0; color: #475467; font-size: .75rem; line-height: 1.4; }
+    .attachments-table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 9px; background: #fff; }
+    .attachments-table { width: 100%; min-width: 680px; border-collapse: collapse; }
+    .attachments-table th { padding: .6rem .65rem; border-bottom: 1px solid var(--border); background: #f8fafc; color: #475467; font-size: .68rem; text-align: left; white-space: nowrap; }
+    .attachments-table td { padding: .62rem .65rem; border-bottom: 1px solid #edf0f3; color: #475467; font-size: .74rem; vertical-align: middle; }
+    .attachments-table tr:last-child td { border-bottom: 0; }
+    .attachment-name { max-width: 260px; color: var(--text); font-weight: 650; word-break: break-word; }
+    .attachment-action { border: 0; background: transparent; color: var(--primary); font-size: .72rem; font-weight: 700; text-decoration: underline; }
+    .attachment-action.danger { color: var(--danger); }
     .settings-modal { width: min(620px, 100%); }
     .settings-warning { margin: 0 0 1rem; padding: .75rem; border-radius: 8px; background: #fff7ed; color: #9a3412; font-size: .76rem; line-height: 1.45; }
     .settings-actions { display: flex; justify-content: flex-end; gap: .6rem; }
@@ -298,6 +312,13 @@
       setDoc,
       writeBatch
     } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js";
+    import {
+      deleteObject,
+      getDownloadURL,
+      getStorage,
+      ref as storageRef,
+      uploadBytes
+    } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-storage.js";
 
     const firebaseConfig = {
       apiKey: "AIzaSyCKGbvtSSJxp_0xLFc_gVXnnCDcFYPCYS8",
@@ -320,10 +341,12 @@
         const auth = getAuth(app);
         await setPersistence(auth, browserLocalPersistence);
         const db = getFirestore(app);
+        const storage = getStorage(app);
         window.firebaseServices = {
           configured: true,
           auth,
           db,
+          storage,
           GoogleAuthProvider,
           onAuthStateChanged,
           signInWithPopup,
@@ -334,7 +357,11 @@
           deleteDoc,
           onSnapshot,
           serverTimestamp,
-          writeBatch
+          writeBatch,
+          storageRef,
+          uploadBytes,
+          getDownloadURL,
+          deleteObject
         };
       }
     } catch (error) {
@@ -362,6 +389,8 @@
 
     const today = () => new Date().toISOString().slice(0, 10);
     const makeId = () => `task-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    const makeAttachmentId = () => `file-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    const safeFileName = name => String(name || "file").replace(/[\\/#?%*:|"<>]/g, "-");
     const blankTask = status => ({
       id: makeId(),
       status: status || "new",
@@ -377,10 +406,39 @@
       feedbackRecords: "",
       finalResult: "",
       links: "",
+      attachments: [],
       order: 0,
       createdAt: null,
       updatedAt: null
     });
+
+    function normalizeAttachment(attachment) {
+      return {
+        id: attachment.id || makeAttachmentId(),
+        fileName: attachment.fileName || attachment.name || "Untitled file",
+        fileUrl: attachment.fileUrl || attachment.url || "",
+        storagePath: attachment.storagePath || "",
+        fileSize: Number.isFinite(attachment.fileSize) ? attachment.fileSize : 0,
+        contentType: attachment.contentType || "",
+        uploadedAt: attachment.uploadedAt || null
+      };
+    }
+
+    function attachmentCount(task) {
+      return Array.isArray(task.attachments) ? task.attachments.length : 0;
+    }
+
+    function formatFileSize(bytes) {
+      if (!Number.isFinite(bytes) || bytes <= 0) return "—";
+      const units = ["B", "KB", "MB", "GB"];
+      let size = bytes;
+      let unitIndex = 0;
+      while (size >= 1024 && unitIndex < units.length - 1) {
+        size /= 1024;
+        unitIndex += 1;
+      }
+      return `${size >= 10 || unitIndex === 0 ? Math.round(size) : size.toFixed(1)} ${units[unitIndex]}`;
+    }
 
     function normalizeTask(task) {
       const oldStatus = task.status || task.col || "new";
@@ -402,6 +460,7 @@
         feedbackRecords: task.feedbackRecords || "",
         finalResult: task.finalResult || "",
         links: task.links || "",
+        attachments: Array.isArray(task.attachments) ? task.attachments.map(normalizeAttachment) : [],
         order: Number.isFinite(task.order) ? task.order : 0,
         createdAt: task.createdAt || null,
         updatedAt: task.updatedAt || null
@@ -451,6 +510,7 @@
         feedbackRecords: task.feedbackRecords || "",
         finalResult: task.finalResult || "",
         links: task.links || "",
+        attachments: Array.isArray(task.attachments) ? task.attachments.map(normalizeAttachment) : [],
         status: task.status || "new",
         order: Number.isFinite(task.order) ? task.order : 0,
         updatedAt: timestamp
@@ -728,14 +788,17 @@
       );
     }
 
-    function TaskModal({ task, isNew, onSave, onDelete, onClose, aiSettings, onOpenAISettings, quickEntryStart }) {
+    function TaskModal({ task, isNew, onSave, onDelete, onClose, onUploadAttachments, onDeleteAttachment, aiSettings, onOpenAISettings, quickEntryStart }) {
       const [form, setForm] = useState(task);
       const [quickText, setQuickText] = useState("");
       const [parsedResult, setParsedResult] = useState(null);
       const [parseMessage, setParseMessage] = useState("");
       const [parsing, setParsing] = useState(false);
       const [listening, setListening] = useState(false);
+      const [uploading, setUploading] = useState(false);
+      const [attachmentMessage, setAttachmentMessage] = useState("");
       const quickEntryRef = useRef(null);
+      const fileInputRef = useRef(null);
       useEffect(() => {
         const closeOnEscape = event => event.key === "Escape" && onClose();
         window.addEventListener("keydown", closeOnEscape);
@@ -751,6 +814,44 @@
         event.preventDefault();
         if (!form.title.trim()) return;
         onSave({ ...form, title: form.title.trim() });
+      };
+
+      const uploadFiles = async event => {
+        const files = Array.from(event.target.files || []);
+        event.target.value = "";
+        if (!files.length) return;
+        if (!form.title.trim()) {
+          setAttachmentMessage("Please add a task title before uploading files.");
+          return;
+        }
+        setUploading(true);
+        setAttachmentMessage("Uploading files…");
+        try {
+          const updatedTask = await onUploadAttachments({ ...form, title: form.title.trim() }, files, isNew);
+          setForm(updatedTask);
+          setAttachmentMessage(`${files.length} file${files.length === 1 ? "" : "s"} uploaded.`);
+        } catch (error) {
+          console.error("File upload failed", error);
+          setAttachmentMessage(`Upload failed: ${error.message}`);
+        } finally {
+          setUploading(false);
+        }
+      };
+
+      const deleteAttachment = async attachment => {
+        if (!window.confirm(`Delete "${attachment.fileName}"? This will remove the file from Firebase Storage.`)) return;
+        setUploading(true);
+        setAttachmentMessage("Deleting file…");
+        try {
+          const updatedTask = await onDeleteAttachment(form, attachment);
+          setForm(updatedTask);
+          setAttachmentMessage("File deleted.");
+        } catch (error) {
+          console.error("File delete failed", error);
+          setAttachmentMessage(`Delete failed: ${error.message}`);
+        } finally {
+          setUploading(false);
+        }
       };
 
       const parseWithRules = () => {
@@ -941,8 +1042,49 @@
                 <div className="field full">
                   <label htmlFor="links">Links or attachment notes</label>
                   <textarea id="links" name="links" value={form.links} onChange={change} placeholder="Paste document links, ticket URLs, file paths, or attachment notes here…" />
-                  <p className="hint">This simple version stores text and links, not uploaded files.</p>
+                  <p className="hint">Use this for outside links or notes. Use Attachments below for actual file uploads.</p>
                 </div>
+                <section className="attachments-section">
+                  <div className="attachments-header">
+                    <div>
+                      <h3>Attachments</h3>
+                      <p>Upload files for this task. File contents are stored in Firebase Storage; only file details are saved with the task.</p>
+                    </div>
+                    <div>
+                      <input ref={fileInputRef} className="file-input" type="file" multiple onChange={uploadFiles} />
+                      <button type="button" className="btn btn-secondary" onClick={() => fileInputRef.current?.click()} disabled={uploading}>{uploading ? "Working…" : "Upload files"}</button>
+                    </div>
+                  </div>
+                  <div className="attachments-table-wrap">
+                    <table className="attachments-table">
+                      <thead>
+                        <tr>
+                          <th>File name</th>
+                          <th>Upload time</th>
+                          <th>File size</th>
+                          <th>Open</th>
+                          <th>Download</th>
+                          <th>Delete</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {attachmentCount(form) ? form.attachments.map(attachment => (
+                          <tr key={attachment.id}>
+                            <td className="attachment-name">{attachment.fileName}</td>
+                            <td>{formatDate(attachment.uploadedAt, true)}</td>
+                            <td>{formatFileSize(attachment.fileSize)}</td>
+                            <td><button type="button" className="attachment-action" onClick={() => window.open(attachment.fileUrl, "_blank", "noopener")}>Open</button></td>
+                            <td><a className="attachment-action" href={attachment.fileUrl} download={attachment.fileName} target="_blank" rel="noopener noreferrer">Download</a></td>
+                            <td><button type="button" className="attachment-action danger" onClick={() => deleteAttachment(attachment)} disabled={uploading}>Delete</button></td>
+                          </tr>
+                        )) : (
+                          <tr><td colSpan="6">No files uploaded yet.</td></tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                  {attachmentMessage && <p className="attachment-message">{attachmentMessage}</p>}
+                </section>
               </div>
             </div>
             <div className="modal-actions">
@@ -965,6 +1107,7 @@
           <div className="card-meta">
             <span className={`pill priority-${task.priority.toLowerCase()}`}>{task.priority}</span>
             {task.project && <span className="pill">{task.project}</span>}
+            {attachmentCount(task) > 0 && <span className="pill">{attachmentCount(task)} file{attachmentCount(task) === 1 ? "" : "s"}</span>}
           </div>
           {task.source && <p className="card-line"><strong>From:</strong> {task.source}</p>}
           {task.deadline && <p className="card-line"><strong>Due:</strong> {task.deadline}</p>}
@@ -998,6 +1141,7 @@
       const [dateTo, setDateTo] = useState("");
       const [unfinishedOnly, setUnfinishedOnly] = useState(false);
       const [feedbackOnly, setFeedbackOnly] = useState(false);
+      const [attachmentFilter, setAttachmentFilter] = useState("");
       const [sortBy, setSortBy] = useState("updatedAt");
       const [sortDirection, setSortDirection] = useState("desc");
 
@@ -1028,6 +1172,8 @@
             if (dateTo && (!created || created > dateTo)) return false;
             if (unfinishedOnly && ["done", "archived"].includes(task.status)) return false;
             if (feedbackOnly && task.status !== "feedback") return false;
+            if (attachmentFilter === "has" && attachmentCount(task) === 0) return false;
+            if (attachmentFilter === "none" && attachmentCount(task) > 0) return false;
             return true;
           })
           .sort((a, b) => {
@@ -1036,7 +1182,7 @@
             const difference = typeof first === "string" ? first.localeCompare(second) : first - second;
             return (sortDirection === "asc" ? difference : -difference) || a.title.localeCompare(b.title);
           });
-      }, [tasks, search, status, project, priority, dateFrom, dateTo, unfinishedOnly, feedbackOnly, sortBy, sortDirection]);
+      }, [tasks, search, status, project, priority, dateFrom, dateTo, unfinishedOnly, feedbackOnly, attachmentFilter, sortBy, sortDirection]);
 
       const openFromKeyboard = (event, task) => {
         if (event.key === "Enter" || event.key === " ") {
@@ -1086,6 +1232,9 @@
             <div className="filter-checks">
               <label className="check-label"><input type="checkbox" checked={unfinishedOnly} onChange={event => setUnfinishedOnly(event.target.checked)} /> Show only unfinished tasks</label>
               <label className="check-label"><input type="checkbox" checked={feedbackOnly} onChange={event => setFeedbackOnly(event.target.checked)} /> Show only tasks waiting for feedback</label>
+              <label className="check-label"><input type="radio" name="attachmentFilter" checked={attachmentFilter === "has"} onChange={() => setAttachmentFilter("has")} /> Has attachments</label>
+              <label className="check-label"><input type="radio" name="attachmentFilter" checked={attachmentFilter === "none"} onChange={() => setAttachmentFilter("none")} /> No attachments</label>
+              {attachmentFilter && <button type="button" className="btn btn-secondary" onClick={() => setAttachmentFilter("")}>Clear file filter</button>}
             </div>
             <div className="sort-controls">
               <div className="filter-field">
@@ -1106,7 +1255,7 @@
 
           <div className="task-table-wrap">
             <table className="task-table">
-              <thead><tr><th>Title</th><th>Status</th><th>Project / Category</th><th>Task source</th><th>Priority</th><th>Created date</th><th>Due date</th><th>Last updated</th><th>Final result / summary</th></tr></thead>
+              <thead><tr><th>Title</th><th>Status</th><th>Project / Category</th><th>Task source</th><th>Priority</th><th>Files</th><th>Created date</th><th>Due date</th><th>Last updated</th><th>Final result / summary</th></tr></thead>
               <tbody>
                 {filteredTasks.map(task => (
                   <tr key={task.id} tabIndex="0" onClick={() => onOpen(task)} onKeyDown={event => openFromKeyboard(event, task)}>
@@ -1115,6 +1264,7 @@
                     <td>{task.project || "—"}</td>
                     <td>{task.source || "—"}</td>
                     <td><span className={`pill priority-${task.priority.toLowerCase()}`}>{task.priority}</span></td>
+                    <td>{attachmentCount(task)}</td>
                     <td>{formatDate(createdDate(task))}</td>
                     <td>{formatDate(task.deadline)}</td>
                     <td>{formatDate(task.updatedAt, true)}</td>
@@ -1133,6 +1283,7 @@
                   <span className="pill">{statusTitle(task.status)}</span>
                   <span className={`pill priority-${task.priority.toLowerCase()}`}>{task.priority}</span>
                   {task.project && <span className="pill">{task.project}</span>}
+                  {attachmentCount(task) > 0 && <span className="pill">{attachmentCount(task)} file{attachmentCount(task) === 1 ? "" : "s"}</span>}
                 </div>
                 {task.source && <p><strong>From:</strong> {task.source}</p>}
                 <p><strong>Created:</strong> {formatDate(createdDate(task))} · <strong>Due:</strong> {formatDate(task.deadline)}</p>
@@ -1254,6 +1405,55 @@
         }
       };
 
+      const uploadAttachments = async (task, files, isNewRecord = false) => {
+        if (!services?.configured || !user) throw new Error("Please sign in before uploading files.");
+        setSyncStatus("Syncing");
+        setMessage("");
+        const uploaded = [];
+        for (const file of files) {
+          const uniqueFileName = `${Date.now()}-${Math.random().toString(16).slice(2)}-${safeFileName(file.name)}`;
+          const storagePath = `users/${user.uid}/tasks/${task.id}/${uniqueFileName}`;
+          const fileReference = services.storageRef(services.storage, storagePath);
+          await services.uploadBytes(fileReference, file, { contentType: file.type || "application/octet-stream" });
+          const fileUrl = await services.getDownloadURL(fileReference);
+          uploaded.push({
+            id: makeAttachmentId(),
+            fileName: file.name,
+            fileUrl,
+            storagePath,
+            fileSize: file.size,
+            contentType: file.type || "",
+            uploadedAt: new Date().toISOString()
+          });
+        }
+        const updatedTask = normalizeTask({
+          ...task,
+          attachments: [...(Array.isArray(task.attachments) ? task.attachments : []), ...uploaded]
+        });
+        const saved = await writeTask(updatedTask, isNewRecord);
+        if (!saved) throw new Error("Files uploaded, but task metadata could not be saved. Please try saving the task again.");
+        setEditing(updatedTask);
+        if (isNewRecord) setIsNew(false);
+        return updatedTask;
+      };
+
+      const deleteAttachment = async (task, attachment) => {
+        if (!services?.configured || !user) throw new Error("Please sign in before deleting files.");
+        setSyncStatus("Syncing");
+        setMessage("");
+        if (attachment.storagePath) {
+          await services.deleteObject(services.storageRef(services.storage, attachment.storagePath));
+        }
+        const updatedTask = normalizeTask({
+          ...task,
+          attachments: (Array.isArray(task.attachments) ? task.attachments : []).filter(item => item.id !== attachment.id)
+        });
+        const saved = await writeTask(updatedTask, false);
+        if (!saved) throw new Error("The file was deleted, but the task row could not be updated. Please refresh and try again.");
+        setEditing(updatedTask);
+        return updatedTask;
+      };
+
       const signIn = async () => {
         if (!services?.configured) return;
         setMessage("");
@@ -1295,6 +1495,14 @@
         setSyncStatus("Syncing");
         setMessage("");
         try {
+          const task = tasks.find(item => item.id === id);
+          if (task?.attachments?.length) {
+            await Promise.allSettled(task.attachments.map(attachment => (
+              attachment.storagePath
+                ? services.deleteObject(services.storageRef(services.storage, attachment.storagePath))
+                : Promise.resolve()
+            )));
+          }
           await services.deleteDoc(services.doc(tasksCollection(), id));
           setEditing(null);
         } catch (error) {
@@ -1423,7 +1631,7 @@
               )}
             </>
           )}
-          {editing && <TaskModal task={editing} isNew={isNew} onSave={saveTask} onDelete={deleteTask} onClose={() => setEditing(null)} aiSettings={aiSettings} onOpenAISettings={() => setShowAISettings(true)} quickEntryStart={quickEntryStart} />}
+          {editing && <TaskModal task={editing} isNew={isNew} onSave={saveTask} onDelete={deleteTask} onClose={() => setEditing(null)} onUploadAttachments={uploadAttachments} onDeleteAttachment={deleteAttachment} aiSettings={aiSettings} onOpenAISettings={() => setShowAISettings(true)} quickEntryStart={quickEntryStart} />}
           {showAISettings && <AISettingsModal settings={aiSettings} onSave={setAISettings} onClose={() => setShowAISettings(false)} />}
         </>
       );
