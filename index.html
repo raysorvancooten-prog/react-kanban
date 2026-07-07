@@ -450,21 +450,39 @@
       return "云端附件";
     }
 
+    function cleanAttachmentFileName(name) {
+      return String(name || "")
+        .replace(/【(?:金山文档|WPS|飞书|飞书文档|云文档)】/g, "")
+        .trim();
+    }
+
     function parseAttachmentLinks(text) {
-      return String(text || "")
-        .split(/\n+/)
-        .flatMap(line => {
-          const urls = line.match(/https?:\/\/[^\s，,。；;]+/g) || [];
-          return urls.map(url => {
-            const nearbyText = line.replace(url, "").trim().replace(/^[：:\-\s]+|[：:\-\s]+$/g, "");
-            return {
+      const lines = String(text || "").split(/\r?\n/);
+      let lastTextLine = "";
+      const attachments = [];
+
+      lines.forEach(line => {
+        const urls = line.match(/https?:\/\/[^\s，,。；;]+/g) || [];
+        const lineWithoutUrls = urls.reduce((value, url) => value.replace(url, ""), line);
+        const nearbyText = cleanAttachmentFileName(lineWithoutUrls.replace(/^[：:\-\s]+|[：:\-\s]+$/g, ""));
+
+        if (urls.length) {
+          urls.forEach(url => {
+            const previousText = cleanAttachmentFileName(lastTextLine);
+            attachments.push({
               id: makeAttachmentId(),
-              fileName: nearbyText || defaultAttachmentName(url),
+              fileName: nearbyText || previousText || defaultAttachmentName(url),
               fileUrl: url,
               uploadedAt: new Date().toISOString()
-            };
+            });
           });
-        });
+        } else {
+          const cleanLine = cleanAttachmentFileName(line);
+          if (cleanLine) lastTextLine = cleanLine;
+        }
+      });
+
+      return attachments;
     }
 
     function normalizeNextActions(items, legacyText = "", keepEmpty = false) {
