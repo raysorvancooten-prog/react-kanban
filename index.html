@@ -280,6 +280,20 @@
     .mobile-task-card h3 { margin: 0 0 .55rem; font-size: .9rem; }
     .mobile-task-meta { display: flex; flex-wrap: wrap; gap: .35rem; margin-bottom: .55rem; }
     .mobile-task-card p { margin: .3rem 0 0; color: var(--muted); font-size: .74rem; line-height: 1.4; }
+    .stats-export-view { display: grid; gap: 1rem; padding: 1rem 1.5rem 2rem; }
+    .stats-panel, .stats-section { border: 1px solid var(--border); border-radius: 12px; background: var(--surface); padding: 1rem; }
+    .stats-section h2 { margin: 0 0 .7rem; font-size: .95rem; }
+    .stats-section p { margin: .2rem 0 0; color: var(--muted); font-size: .74rem; }
+    .stats-filter-grid { display: grid; grid-template-columns: repeat(4, minmax(150px, 1fr)); gap: .75rem; }
+    .stats-filter-grid .full { grid-column: 1 / -1; }
+    .summary-cards { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .75rem; }
+    .summary-card { padding: .9rem; border: 1px solid var(--border); border-radius: 10px; background: #fff; }
+    .summary-card span { display: block; color: var(--muted); font-size: .72rem; }
+    .summary-card strong { display: block; margin-top: .35rem; color: var(--text); font-size: 1rem; }
+    .stats-table { min-width: 960px; }
+    .export-preview-table { min-width: 1500px; }
+    .export-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; margin-bottom: .85rem; }
+    .export-field-list { display: grid; grid-template-columns: repeat(4, minmax(150px, 1fr)); gap: .55rem .8rem; }
     .quick-entry { grid-column: 1 / -1; padding: 1rem; border: 1px solid #c7d2fe; border-radius: 10px; background: #f7f7ff; }
     .quick-entry h3 { margin: 0 0 .25rem; font-size: .95rem; }
     .quick-entry-intro { margin: 0 0 .7rem; color: var(--muted); font-size: .75rem; line-height: 1.45; }
@@ -367,6 +381,10 @@
       .date-filters { grid-template-columns: 1fr; }
       .sort-controls { align-items: stretch; flex-direction: column; }
       .task-table-wrap { display: none; }
+      .stats-export-view .task-table-wrap { display: block; overflow-x: auto; }
+      .stats-export-view { padding: .75rem 1rem 1.5rem; }
+      .stats-filter-grid, .summary-cards, .export-field-list { grid-template-columns: 1fr; }
+      .export-header { flex-direction: column; }
       .mobile-task-list { display: flex; flex-direction: column; gap: .65rem; }
       .preview-grid { grid-template-columns: 1fr; }
       .quick-actions .btn { flex: 1; }
@@ -498,6 +516,7 @@
       nextAction: "",
       nextActions: [],
       executionItems: [],
+      actualHours: "",
       processNotes: "",
       processItems: [],
       feedbackRecords: "",
@@ -539,6 +558,46 @@
         unitIndex += 1;
       }
       return `${size >= 10 || unitIndex === 0 ? Math.round(size) : size.toFixed(1)} ${units[unitIndex]}`;
+    }
+
+    function normalizeHours(value) {
+      if (value === null || value === undefined || value === "") return "";
+      const number = Number(String(value).replace(/[^\d.]/g, ""));
+      return Number.isFinite(number) && number >= 0 ? String(number) : "";
+    }
+
+    function hoursNumber(value) {
+      const normalized = normalizeHours(value);
+      return normalized === "" ? null : Number(normalized);
+    }
+
+    function formatHours(value) {
+      const number = hoursNumber(value);
+      return number === null ? "未填写" : `${Number.isInteger(number) ? number : number.toFixed(1)} 小时`;
+    }
+
+    function extractActualHours(text) {
+      const match = String(text || "").match(/(?:花了|耗时|用了|用时|实际耗时|spent|took)\s*(\d+(?:\.\d+)?)\s*(?:个)?(?:小时|h|hours?)/i);
+      return match ? normalizeHours(match[1]) : "";
+    }
+
+    function removeActualHoursText(text) {
+      return String(text || "")
+        .replace(/(?:花了|耗时|用了|用时|实际耗时|spent|took)\s*\d+(?:\.\d+)?\s*(?:个)?(?:小时|h|hours?)/ig, "")
+        .trim();
+    }
+
+    function extractActualHourStepItems(text) {
+      const items = [];
+      String(text || "").split(/[，,。；;\n]/).forEach(clause => {
+        const match = clause.trim().match(/(.+?)(?:大概|大约|约)?(?:花了|耗时|用了|用时)\s*(\d+(?:\.\d+)?)\s*(?:个)?(?:小时|h|hours?)/i);
+        if (!match) return;
+        const stepText = cleanExecutionStep(removeActualHoursText(match[1]));
+        if (stepText && !/(?:这个|整个)?任务(?:一共|总共)?$/.test(stepText)) {
+          items.push({ id: makeRowId("exec"), text: stepText, status: /今天|已经|完成|做完/.test(clause) ? "已完成" : "进行中", dueText: "", reminderAt: "", actualHours: normalizeHours(match[2]), feedbackNote: "", attachments: [] });
+        }
+      });
+      return items;
     }
 
     function defaultAttachmentName(url) {
@@ -870,27 +929,28 @@
             status: ["未开始", "进行中", "已完成", "等待反馈", "需调整"].includes(item?.status) ? item.status : "未开始",
             dueText: typeof item === "object" ? (item?.dueText || "") : "",
             reminderAt: typeof item === "object" ? (item?.reminderAt || item?.reminderTime || "") : "",
+            actualHours: typeof item === "object" ? normalizeHours(item?.actualHours) : "",
             feedbackNote: typeof item === "object" ? (item?.feedbackNote || "") : "",
             attachments: typeof item === "object" && Array.isArray(item?.attachments) ? item.attachments.map(normalizeAttachment) : []
           });
         });
       } else {
         normalizeNextActions(task.nextActions, task.nextAction).forEach(item => {
-          prepared.push({ id: item.id || makeRowId("exec"), text: item.text, status: item.status === "已完成" ? "已完成" : "未开始", dueText: item.dueText || "", reminderAt: "", feedbackNote: "", attachments: [] });
+          prepared.push({ id: item.id || makeRowId("exec"), text: item.text, status: item.status === "已完成" ? "已完成" : "未开始", dueText: item.dueText || "", reminderAt: "", actualHours: "", feedbackNote: "", attachments: [] });
         });
         normalizeFeedbackItems(task.feedbackItems, task.feedbackRecords).forEach(item => {
-          prepared.push({ id: item.id || makeRowId("exec"), text: item.text || "反馈调整", status: "需调整", dueText: item.createdAt || "", reminderAt: "", feedbackNote: item.text || "", attachments: item.attachments || [] });
+          prepared.push({ id: item.id || makeRowId("exec"), text: item.text || "反馈调整", status: "需调整", dueText: item.createdAt || "", reminderAt: "", actualHours: "", feedbackNote: item.text || "", attachments: item.attachments || [] });
         });
         normalizeProcessItems(task.processItems, task.processNotes).forEach(item => {
           const done = /已完成|完成了|整理完|做完|已提交/.test(item.text || "");
           const reviewLike = /复盘|总结|经验|下次|建议|最好|可优先|教训/.test(item.text || "");
           if (!reviewLike) {
-            prepared.push({ id: item.id || makeRowId("exec"), text: item.text, status: done ? "已完成" : "进行中", dueText: item.createdAt || "", reminderAt: "", feedbackNote: "", attachments: item.attachments || [] });
+            prepared.push({ id: item.id || makeRowId("exec"), text: item.text, status: done ? "已完成" : "进行中", dueText: item.createdAt || "", reminderAt: "", actualHours: "", feedbackNote: "", attachments: item.attachments || [] });
           }
         });
       }
       return (keepEmpty ? prepared : prepared.filter(item => item.text.trim() || item.feedbackNote.trim() || item.attachments.length))
-        .map(item => ({ ...item, text: item.text.trim(), dueText: item.dueText.trim(), reminderAt: String(item.reminderAt || "").trim(), feedbackNote: item.feedbackNote.trim() }));
+        .map(item => ({ ...item, text: item.text.trim(), dueText: item.dueText.trim(), reminderAt: String(item.reminderAt || "").trim(), actualHours: normalizeHours(item.actualHours), feedbackNote: item.feedbackNote.trim() }));
     }
 
     function normalizeReviewItems(items, task = {}, keepEmpty = false) {
@@ -978,6 +1038,7 @@
         startDate: task.startDate || "",
         priority: normalizePriority(task.priority) || "优先级3",
         deadline: task.deadline || "",
+        actualHours: normalizeHours(task.actualHours),
         reminderAt: task.reminderAt || datetimeLocalFromReminder(task.customReminderAt || task.reminder || ""),
         reminder: displayReminder(task.reminderAt || task.customReminderAt || task.reminder || ""),
         customReminderAt: task.customReminderAt || "",
@@ -1038,6 +1099,7 @@
         background: task.background || "",
         priority: normalizePriority(task.priority) || "优先级3",
         deadline: task.deadline || "",
+        actualHours: normalizeHours(task.actualHours),
         reminderAt: task.reminderAt || datetimeLocalFromReminder(task.reminder || ""),
         reminder: displayReminder(task.reminderAt || task.reminder || ""),
         customReminderAt: task.customReminderAt || "",
@@ -1121,6 +1183,7 @@
       ["title", "任务标题"], ["source", "任务来源/指派人"], ["project", "项目或类别"],
       ["background", "任务背景"], ["receivedDate", "收到日期"], ["startDate", "开始日期"],
       ["dueDate", "完成日期 / 最后期限"], ["reminder", "提醒时间"], ["priority", "优先级"], ["status", "当前进展"],
+      ["actualHours", "实际耗时（小时）"],
       ["nextAction", "下一步动作"], ["workflowNotes", "工作TIPS"],
       ["feedback", "反馈记录"], ["finalResult", "最终结果"]
     ];
@@ -1195,6 +1258,7 @@
       if (result.startDate && !/^\d{4}-\d{2}-\d{2}$/.test(result.startDate)) result.startDate = "";
       if (result.dueDate && !/^\d{4}-\d{2}-\d{2}$/.test(result.dueDate)) result.dueDate = "";
       if (result.reminder) result.reminder = normalizeReminder(result.reminder);
+      result.actualHours = normalizeHours(result.actualHours);
       result.executionItems = Array.isArray(raw?.executionItems)
         ? raw.executionItems.map(item => ({
             id: item.id || makeRowId("exec"),
@@ -1202,6 +1266,7 @@
             status: ["未开始", "进行中", "已完成", "等待反馈", "需调整"].includes(item?.status) ? item.status : "未开始",
             dueText: typeof item === "object" ? (item?.dueText || "") : "",
             reminderAt: typeof item === "object" ? (item?.reminderAt || item?.reminderTime || "") : "",
+            actualHours: typeof item === "object" ? normalizeHours(item?.actualHours) : "",
             feedbackNote: typeof item === "object" ? (item?.feedbackNote || "") : "",
             attachments: typeof item === "object" && Array.isArray(item?.attachments) ? item.attachments.map(normalizeAttachment) : []
           })).filter(item => item.text || item.feedbackNote || item.attachments.length)
@@ -1398,7 +1463,7 @@
       if (/市场大盘/.test(text)) steps.push("梳理俄罗斯水槽市场大盘");
       if (/消费者习惯/.test(text)) steps.push("分析消费者习惯");
       steps.push("输出俄罗斯水槽市场规划PPT");
-      return [...new Set(steps)].map(step => ({ id: makeRowId("exec"), text: step, status: "未开始", dueText: "", reminderAt: "", feedbackNote: "", attachments: [] }));
+      return [...new Set(steps)].map(step => ({ id: makeRowId("exec"), text: step, status: "未开始", dueText: "", reminderAt: "", actualHours: "", feedbackNote: "", attachments: [] }));
     }
 
     function extractRuleSource(text) {
@@ -1494,9 +1559,10 @@
 
     function buildExecutionItemFromText(text, defaultStatus = "未开始", attachments = []) {
       const timing = extractStepTiming(text);
-      const cleanedStep = cleanStepTextWithTiming(text);
+      const actualHours = extractActualHours(text);
+      const cleanedStep = cleanStepTextWithTiming(removeActualHoursText(text));
       if (!cleanedStep || isDeadlineOnlyStep(cleanedStep)) return null;
-      return { id: makeRowId("exec"), text: cleanedStep, status: defaultStatus, dueText: timing.dueText, reminderAt: timing.reminderAt, feedbackNote: "", attachments };
+      return { id: makeRowId("exec"), text: cleanedStep, status: defaultStatus, dueText: timing.dueText, reminderAt: timing.reminderAt, actualHours, feedbackNote: "", attachments };
     }
 
     function extractRuleDueDate(text) {
@@ -1514,6 +1580,7 @@
       const { compact, segments } = segmentRuleText(text);
       const assignmentPhrase = assignmentPhraseFromSegments(segments);
       const progressText = segments.progress.map(cleanProgressText).filter(Boolean).join("\n");
+      result.actualHours = /(?:这个|整个)?任务/.test(compact) ? extractActualHours(compact) : "";
 
       const explicitPriority = compact.match(/(?:优先级|priority)\s*(?:是|为|[:：])?\s*(\d+|高|中|低|high|medium|normal|low|urgent|紧急|最高|高优先级|重要|中等|普通|一般|不急|低优先级)/i);
       if (explicitPriority) result.priority = normalizePriority(explicitPriority[1]);
@@ -1608,13 +1675,16 @@
       const workflowSentences = compact.split(/[。;；\n]/).filter(sentence => /(?:进展(?:是|为|：|:)|处理记录|已做|沟通记录|workflow notes?|progress notes?)/i.test(sentence));
       result.workflowNotes = progressText || workflowSentences.join("；");
       result.executionItems = [];
+      extractActualHourStepItems(compact).forEach(item => {
+        if (!result.executionItems.some(existing => existing.text === item.text)) result.executionItems.push(item);
+      });
       if (result.nextAction) {
         splitStructuredItems(result.nextAction).forEach(text => {
           const dueText = extractDueText(text);
           const timing = extractStepTiming(text);
           const cleanedStep = cleanStepTextWithTiming(removeDuePrefix(text, dueText));
           if (!isDeadlineOnlyStep(text) && cleanedStep) {
-            result.executionItems.push({ id: makeRowId("exec"), text: cleanedStep, status: "未开始", dueText: timing.dueText || dueText, reminderAt: timing.reminderAt, feedbackNote: "", attachments: [] });
+            result.executionItems.push({ id: makeRowId("exec"), text: cleanedStep, status: "未开始", dueText: timing.dueText || dueText, reminderAt: timing.reminderAt, actualHours: extractActualHours(text), feedbackNote: "", attachments: [] });
           }
         });
       }
@@ -1645,6 +1715,7 @@
             status: "未开始",
             dueText: parseDateExpression(stepTimingMatch[1]) || stepTimingMatch[1],
             reminderAt: reminderPart ? datetimeLocalFromReminder(reminderPart[0]) : "",
+            actualHours: extractActualHours(clause),
             feedbackNote: "",
             attachments: []
           };
@@ -1661,17 +1732,17 @@
       }
       if (result.feedback) {
         splitStructuredItems(result.feedback).forEach(text => {
-          result.executionItems.push({ id: makeRowId("exec"), text: text.replace(/^(?:老板|领导|客户)?反馈(?:说|是)?/, "") || "反馈调整", status: "需调整", dueText: "", reminderAt: "", feedbackNote: text, attachments: [] });
+          result.executionItems.push({ id: makeRowId("exec"), text: text.replace(/^(?:老板|领导|客户)?反馈(?:说|是)?/, "") || "反馈调整", status: "需调整", dueText: "", reminderAt: "", actualHours: extractActualHours(text), feedbackNote: text, attachments: [] });
         });
       }
       const missingMatch = compact.match(/发现([^，。；;\n]+?)(?:还)?(?:缺|缺失|不够|需要补)/);
       if (missingMatch?.[1]) {
         const target = missingMatch[1].trim();
-        result.executionItems.push({ id: makeRowId("exec"), text: `补充${target}`, status: "需调整", dueText: "", reminderAt: "", feedbackNote: `${target}数据缺失`, attachments: [] });
+        result.executionItems.push({ id: makeRowId("exec"), text: `补充${target}`, status: "需调整", dueText: "", reminderAt: "", actualHours: "", feedbackNote: `${target}数据缺失`, attachments: [] });
       }
       if (/等反馈|等待反馈/.test(compact) && !result.executionItems.some(item => item.status === "等待反馈")) {
         const confirmMatch = compact.match(/(?:已经|已)?([^，。；;\n]*?发给[^，。；;\n]*?确认)/);
-        result.executionItems.push({ id: makeRowId("exec"), text: confirmMatch?.[1]?.trim() || "发给相关人员确认", status: "等待反馈", dueText: "", reminderAt: "", feedbackNote: "等待反馈", attachments: [] });
+        result.executionItems.push({ id: makeRowId("exec"), text: confirmMatch?.[1]?.trim() || "发给相关人员确认", status: "等待反馈", dueText: "", reminderAt: "", actualHours: "", feedbackNote: "等待反馈", attachments: [] });
       }
       if (/复盘|总结|经验|下次|建议|最好|可优先|教训|这次发现/.test(compact)) {
         result.reviewSummary = compact.replace(/^这次发现/, "").trim();
@@ -1839,15 +1910,16 @@
     function inferExecutionUpdate(text) {
       const value = String(text || "").trim();
       if (!value) return null;
+      const actualHours = extractActualHours(value);
       let match = value.match(/(.+?)(?:这一步|这项|这个步骤)?(?:已经完成|已完成|做完了|完成了)/);
-      if (match?.[1]) return { matchText: cleanExecutionStep(match[1]), text: cleanExecutionStep(match[1]), status: "已完成", feedbackNote: "" };
+      if (match?.[1]) return { matchText: cleanExecutionStep(removeActualHoursText(match[1])), text: cleanExecutionStep(removeActualHoursText(match[1])), status: "已完成", actualHours, feedbackNote: "" };
       match = value.match(/(.+?)(?:等|等待|待)(?:老板|领导|客户|供应商)?反馈/);
-      if (match?.[1]) return { matchText: cleanExecutionStep(match[1]), text: cleanExecutionStep(match[1]), status: "等待反馈", feedbackNote: "等待反馈" };
+      if (match?.[1]) return { matchText: cleanExecutionStep(removeActualHoursText(match[1])), text: cleanExecutionStep(removeActualHoursText(match[1])), status: "等待反馈", actualHours, feedbackNote: "等待反馈" };
       match = value.match(/(?:老板|领导|客户|供应商)?反馈(?:说)?(.+?)要调整/);
       if (match?.[1]) {
         const feedbackTarget = match[1].includes("价格段") && !match[1].includes("分析") ? `${match[1]}分析` : match[1];
         const core = cleanExecutionStep(`${feedbackTarget}调整`);
-        return { matchText: cleanExecutionStep(match[1]), text: core, status: "需调整", feedbackNote: `老板反馈：${match[1]}要调整` };
+        return { matchText: cleanExecutionStep(match[1]), text: core, status: "需调整", actualHours, feedbackNote: `老板反馈：${match[1]}要调整` };
       }
       return null;
     }
@@ -1856,14 +1928,14 @@
       const compact = String(text || "").trim();
       const attachments = parseAttachmentLinks(compact);
       const contentText = removeAttachmentLines(compact);
-      const result = { status: inferTaskStatusFromText(compact), startDate: extractStartDate(compact), dueDate: extractCompletionDate(compact), reminder: normalizeReminder(compact), executionUpdates: [], executionItems: [], feedbackItems: [], nextActions: [], processItems: [], finalResults: [], reviewItems: [], attachments };
+      const result = { status: inferTaskStatusFromText(compact), startDate: extractStartDate(compact), dueDate: extractCompletionDate(compact), reminder: normalizeReminder(compact), actualHours: /(?:这个|整个)?任务/.test(compact) ? extractActualHours(compact) : "", executionUpdates: [], executionItems: [], feedbackItems: [], nextActions: [], processItems: [], finalResults: [], reviewItems: [], attachments };
       if (!compact) return result;
       const executionUpdate = inferExecutionUpdate(contentText);
       if (executionUpdate) result.executionUpdates.push({ ...executionUpdate, attachments });
 
       const hasFeedback = /反馈|老板反馈|客户反馈|供应商反馈|领导反馈/.test(contentText);
       const hasExplicitNextAction = /下一步|接下来/.test(contentText);
-      const hasProcess = /今天|已经|处理了|整理了|进展|发现|沟通了/.test(contentText);
+      const hasProcess = /今天|已经|处理了|整理了|进展|发现|沟通了|花了|耗时|用了|用时/.test(contentText);
       const hasFinal = /最终|结果|已提交|已经提交|已完成交付|完成交付/.test(contentText);
       const hasReview = /复盘|总结|经验|下次|建议|最好|可优先|教训|这次发现/.test(contentText);
       const timeText = todayTimeText();
@@ -1871,14 +1943,14 @@
       const addFeedback = (textValue, rowAttachments = []) => {
         if (textValue.trim() || rowAttachments.length) {
           result.feedbackItems.push({ id: makeRowId("feedback"), text: textValue.trim(), createdAt: timeText, attachments: rowAttachments, status: "新反馈" });
-          result.executionItems.push({ id: makeRowId("exec"), text: textValue.trim() || "反馈调整", status: "需调整", dueText: "", reminderAt: "", feedbackNote: textValue.trim(), attachments: rowAttachments });
+          result.executionItems.push({ id: makeRowId("exec"), text: textValue.trim() || "反馈调整", status: "需调整", dueText: "", reminderAt: "", actualHours: extractActualHours(textValue), feedbackNote: textValue.trim(), attachments: rowAttachments });
         }
       };
       const addNextAction = (textValue, dueText = "") => {
         if (textValue.trim()) {
           result.nextActions.push({ id: makeRowId("next"), text: textValue.trim(), dueText: dueText.trim(), status: "未开始" });
           const timing = extractStepTiming(`${dueText} ${textValue}`);
-          result.executionItems.push({ id: makeRowId("exec"), text: textValue.trim(), status: "未开始", dueText: timing.dueText || dueText.trim(), reminderAt: timing.reminderAt, feedbackNote: "", attachments: [] });
+          result.executionItems.push({ id: makeRowId("exec"), text: removeActualHoursText(textValue.trim()), status: "未开始", dueText: timing.dueText || dueText.trim(), reminderAt: timing.reminderAt, actualHours: extractActualHours(textValue), feedbackNote: "", attachments: [] });
         }
       };
       const addProcess = (textValue, rowAttachments = []) => {
@@ -1886,7 +1958,7 @@
           const stepText = inferExecutionStepText(textValue.trim()) || "执行记录";
           result.processItems.push({ id: makeRowId("process"), text: textValue.trim(), createdAt: timeText, attachments: rowAttachments });
           const timing = extractStepTiming(textValue);
-          result.executionItems.push({ id: makeRowId("exec"), text: stepText, status: inferExecutionStatus(textValue), dueText: timing.dueText || timeText, reminderAt: timing.reminderAt, feedbackNote: "", attachments: rowAttachments });
+          result.executionItems.push({ id: makeRowId("exec"), text: stepText, status: inferExecutionStatus(textValue), dueText: timing.dueText || timeText, reminderAt: timing.reminderAt, actualHours: extractActualHours(textValue), feedbackNote: "", attachments: rowAttachments });
         }
       };
       const addFinal = (textValue, rowAttachments = []) => {
@@ -1903,6 +1975,9 @@
       if (hasReview) addReview(contentText, attachments);
       else if (hasFeedback) addFeedback(contentText, attachments);
       if (hasFinal) addFinal(contentText, attachments);
+      extractActualHourStepItems(contentText).forEach(item => {
+        if (!result.executionItems.some(existing => existing.text === item.text)) result.executionItems.push({ ...item, attachments });
+      });
 
       if (hasExplicitNextAction) {
         let nextText = contentText
@@ -1922,7 +1997,7 @@
       }
 
       if (!hasReview && !hasFeedback && !hasFinal) {
-        if (hasProcess) {
+        if (hasProcess && !result.executionItems.length) {
           const processText = contentText.replace(/(?:，|,)?(?:明天|后天|本周|下周|周[一二三四五六日天]|星期[一二三四五六日天])[^，。；;\n]+/, "").trim();
           addProcess(processText || contentText, attachments);
         } else if (!result.nextActions.length && contentText) {
@@ -2055,6 +2130,7 @@
           ...form,
           title: form.title.trim(),
           priority: normalizePriority(form.priority) || "优先级3",
+          actualHours: normalizeHours(form.actualHours),
           reminderAt: form.reminderAt || "",
           reminder: form.reminderAt ? displayReminder(form.reminderAt) : NO_REMINDER,
           executionItems: normalizeExecutionItems(form.executionItems, form),
@@ -2089,6 +2165,7 @@
         if (smartUpdatePreview.status) next.status = smartUpdatePreview.status;
         if (smartUpdatePreview.startDate) next.startDate = smartUpdatePreview.startDate;
         if (smartUpdatePreview.dueDate) next.deadline = smartUpdatePreview.dueDate;
+        if (smartUpdatePreview.actualHours) next.actualHours = smartUpdatePreview.actualHours;
         if (smartUpdatePreview.reminder && smartUpdatePreview.reminder !== NO_REMINDER) {
           next.reminderAt = datetimeLocalFromReminder(smartUpdatePreview.reminder);
           next.reminder = displayReminder(next.reminderAt);
@@ -2111,6 +2188,7 @@
               existingExecutionItems[targetIndex] = {
                 ...existingExecutionItems[targetIndex],
                 status: update.status,
+                actualHours: update.actualHours || existingExecutionItems[targetIndex].actualHours || "",
                 feedbackNote: appendLongText(existingExecutionItems[targetIndex].feedbackNote, update.feedbackNote),
                 attachments: [...(existingExecutionItems[targetIndex].attachments || []), ...(update.attachments || [])]
               };
@@ -2120,6 +2198,8 @@
                 text: update.text || update.matchText || "执行记录",
                 status: update.status,
                 dueText: "",
+                reminderAt: "",
+                actualHours: update.actualHours || "",
                 feedbackNote: update.feedbackNote || "",
                 attachments: update.attachments || []
               });
@@ -2191,6 +2271,7 @@
           next.reminderAt = "";
           next.reminder = NO_REMINDER;
         }
+        if (result.actualHours) next.actualHours = result.actualHours;
         const detectedAttachments = parseAttachmentLinks(quickText);
         if (detectedAttachments.length) {
           next.attachments = [...(next.attachments || []), ...detectedAttachments];
@@ -2211,7 +2292,7 @@
           const preparedItems = items.length ? items : [result.nextAction];
           const generatedExecutionItems = preparedItems.map(text => {
             const timing = extractStepTiming(text);
-            return { id: makeRowId("exec"), text: cleanStepTextWithTiming(removeDuePrefix(text, timing.dueText || extractDueText(text))), dueText: timing.dueText, reminderAt: timing.reminderAt, status: "未开始", feedbackNote: "", attachments: [] };
+            return { id: makeRowId("exec"), text: cleanStepTextWithTiming(removeDuePrefix(removeActualHoursText(text), timing.dueText || extractDueText(text))), dueText: timing.dueText, reminderAt: timing.reminderAt, actualHours: extractActualHours(text), status: "未开始", feedbackNote: "", attachments: [] };
           }).filter(item => item.text && !isDeadlineOnlyStep(item.text));
           next.nextActions = generatedExecutionItems.map(item => ({ id: makeRowId("next"), text: item.text, dueText: item.dueText, status: item.status }));
           next.executionItems = [
@@ -2433,8 +2514,8 @@
 
         setParsing(true);
         setParseMessage("");
-        const schema = { ...Object.fromEntries(PARSED_FIELDS.map(([key]) => [key, ""])), executionItems: [{ text: "", status: "", dueText: "", reminderAt: "", feedbackNote: "" }], reviewSummary: "" };
-        const systemPrompt = `You extract task fields from Chinese or English text. Return one JSON object only, with exactly this schema: ${JSON.stringify(schema)}. If information is not explicitly stated, use an empty string. Never invent information. Dates must be YYYY-MM-DD. Today is ${dateKey(new Date())}. Priority must be 优先级1, 优先级2, 优先级3, an explicit custom priority such as 优先级4, or empty. Status must be New, To Do, In Progress, Waiting for Feedback, Done, Archived, or empty.`;
+        const schema = { ...Object.fromEntries(PARSED_FIELDS.map(([key]) => [key, ""])), executionItems: [{ text: "", status: "", dueText: "", reminderAt: "", actualHours: "", feedbackNote: "" }], reviewSummary: "" };
+        const systemPrompt = `You extract task fields from Chinese or English text. Return one JSON object only, with exactly this schema: ${JSON.stringify(schema)}. If information is not explicitly stated, use an empty string. Never invent information. Dates must be YYYY-MM-DD. Today is ${dateKey(new Date())}. Priority must be 优先级1, 优先级2, 优先级3, an explicit custom priority such as 优先级4, or empty. Status must be New, To Do, In Progress, Waiting for Feedback, Done, Archived, or empty. actualHours must be a number string in hours only when explicitly stated.`;
         try {
           const response = await fetch(aiSettings.endpoint, {
             method: "POST",
@@ -2566,7 +2647,7 @@
         executionItems[index] = { ...executionItems[index], [field]: value };
         setForm({ ...form, executionItems });
       };
-      const addExecutionItem = () => setForm(current => ({ ...current, executionItems: [...normalizeExecutionItems(current.executionItems, current), { id: makeRowId("exec"), text: "", status: "未开始", dueText: "", reminderAt: "", feedbackNote: "", attachments: [] }] }));
+      const addExecutionItem = () => setForm(current => ({ ...current, executionItems: [...normalizeExecutionItems(current.executionItems, current), { id: makeRowId("exec"), text: "", status: "未开始", dueText: "", reminderAt: "", actualHours: "", feedbackNote: "", attachments: [] }] }));
       const deleteExecutionItem = index => {
         const executionItems = normalizeExecutionItems(form.executionItems, form, true).filter((_, itemIndex) => itemIndex !== index);
         setForm({ ...form, executionItems });
@@ -2718,7 +2799,7 @@
                             <div className="preview-item" key={key}><strong>{label}:</strong> {key === "status" ? statusTitle(parsedResult[key]) : key === "reminder" ? displayReminder(parsedResult[key]) : parsedResult[key]}</div>
                           ))}
                           {parsedResult.executionItems?.map((item, index) => (
-                            <div className="preview-item" key={`exec-${index}`}><strong>执行清单:</strong> {item.text}｜{item.status}{item.dueText ? `｜目标：${item.dueText}` : ""}{item.reminderAt ? `｜提醒：${displayReminder(item.reminderAt)}` : ""}{item.feedbackNote ? `｜${item.feedbackNote}` : ""}</div>
+                            <div className="preview-item" key={`exec-${index}`}><strong>执行清单:</strong> {item.text}｜{item.status}{item.dueText ? `｜目标：${item.dueText}` : ""}{item.reminderAt ? `｜提醒：${displayReminder(item.reminderAt)}` : ""}{item.actualHours ? `｜耗时：${formatHours(item.actualHours)}` : ""}{item.feedbackNote ? `｜${item.feedbackNote}` : ""}</div>
                           ))}
                           {parsedResult.reviewSummary && <div className="preview-item"><strong>复盘小结:</strong> {parsedResult.reviewSummary}</div>}
                           {!PARSED_FIELDS.some(([key]) => parsedResult[key]) && !parsedResult.executionItems?.length && !parsedResult.reviewSummary && <div className="preview-item">No task fields were detected.</div>}
@@ -2750,8 +2831,8 @@
                           {smartUpdatePreview.startDate && <li>开始日期：{smartUpdatePreview.startDate}</li>}
                           {smartUpdatePreview.dueDate && <li>完成日期：{smartUpdatePreview.dueDate}</li>}
                           {smartUpdatePreview.reminder && <li>提醒时间：{displayReminder(smartUpdatePreview.reminder)}</li>}
-                          {smartUpdatePreview.executionUpdates?.map((item, index) => <li key={`exec-update-${index}`}>执行清单更新：{item.text || item.matchText}｜{item.status}{item.dueText ? `｜目标：${item.dueText}` : ""}{item.reminderAt ? `｜提醒：${displayReminder(item.reminderAt)}` : ""}{item.feedbackNote ? `｜${item.feedbackNote}` : ""}</li>)}
-                          {smartUpdatePreview.executionItems.map((item, index) => <li key={`exec-${index}`}>执行清单：{item.text || "仅附件"}｜{item.status}{item.dueText ? `｜目标：${item.dueText}` : ""}{item.reminderAt ? `｜提醒：${displayReminder(item.reminderAt)}` : ""}{item.feedbackNote ? `｜${item.feedbackNote}` : ""}</li>)}
+                          {smartUpdatePreview.executionUpdates?.map((item, index) => <li key={`exec-update-${index}`}>执行清单更新：{item.text || item.matchText}｜{item.status}{item.dueText ? `｜目标：${item.dueText}` : ""}{item.reminderAt ? `｜提醒：${displayReminder(item.reminderAt)}` : ""}{item.actualHours ? `｜耗时：${formatHours(item.actualHours)}` : ""}{item.feedbackNote ? `｜${item.feedbackNote}` : ""}</li>)}
+                          {smartUpdatePreview.executionItems.map((item, index) => <li key={`exec-${index}`}>执行清单：{item.text || "仅附件"}｜{item.status}{item.dueText ? `｜目标：${item.dueText}` : ""}{item.reminderAt ? `｜提醒：${displayReminder(item.reminderAt)}` : ""}{item.actualHours ? `｜耗时：${formatHours(item.actualHours)}` : ""}{item.feedbackNote ? `｜${item.feedbackNote}` : ""}</li>)}
                           {smartUpdatePreview.finalResults.map((item, index) => <li key={`final-${index}`}>交付结果：{item.text || "仅附件"}</li>)}
                           {smartUpdatePreview.reviewItems.map((item, index) => <li key={`review-${index}`}>复盘小结：{item.text || "仅附件"}</li>)}
                           {smartUpdatePreview.attachments.length > 0 && <li>相关附件：{smartUpdatePreview.attachments.map(item => item.fileName).join("、")}</li>}
@@ -2792,6 +2873,10 @@
                         <div className="field">
                           <label htmlFor="deadline">完成日期 / 最后期限</label>
                           <input id="deadline" type="date" name="deadline" value={form.deadline} onChange={change} />
+                        </div>
+                        <div className="field">
+                          <label htmlFor="actualHours">实际耗时（小时）</label>
+                          <input id="actualHours" type="number" min="0" step="0.25" name="actualHours" value={form.actualHours || ""} onChange={change} placeholder="未填写" />
                         </div>
                         <div className="field">
                           <label htmlFor="reminder">提醒时间</label>
@@ -2887,7 +2972,7 @@
                     <div className="section-content">
                       <div className="structured-table-wrap">
                         <table className="structured-table">
-                          <thead><tr><th>序号</th><th>事项/步骤</th><th>状态</th><th>时间/提醒</th><th>反馈/调整记录</th><th>相关附件</th><th>删除</th></tr></thead>
+                          <thead><tr><th>序号</th><th>事项/步骤</th><th>状态</th><th>时间/提醒</th><th>耗时</th><th>反馈/调整记录</th><th>相关附件</th><th>删除</th></tr></thead>
                           <tbody>
                             {executionChecklistItems.map((item, index) => (
                               <tr key={item.id || index}>
@@ -2913,12 +2998,13 @@
                                     <span className="reminder-display">提醒：{displayReminder(item.reminderAt)}</span>
                                   </div>
                                 </td>
+                                <td data-label="耗时"><input type="number" min="0" step="0.25" value={item.actualHours || ""} onChange={event => updateExecutionItem(index, "actualHours", event.target.value)} placeholder="未填写" /></td>
                                 <td data-label="反馈/调整记录"><textarea value={item.feedbackNote} onChange={event => updateExecutionItem(index, "feedbackNote", event.target.value)} placeholder="记录反馈、调整原因或注意点" /></td>
                                 <td data-label="相关附件">{renderRowAttachments(item.attachments, "execution", index)}</td>
                                 <td data-label="删除"><button type="button" className="attachment-action danger" onClick={() => deleteExecutionItem(index)}>Delete</button></td>
                               </tr>
                             ))}
-                            {!executionChecklistItems.length && <tr><td colSpan="7">还没有执行清单。可以点击添加，或用智能入口拆解任务。</td></tr>}
+                            {!executionChecklistItems.length && <tr><td colSpan="8">还没有执行清单。可以点击添加，或用智能入口拆解任务。</td></tr>}
                           </tbody>
                         </table>
                       </div>
@@ -3077,6 +3163,13 @@
       );
     }
 
+    function openTaskFromKeyboard(event, task, onOpen) {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        onOpen(task);
+      }
+    }
+
     function TableView({ tasks, onOpen }) {
       const [search, setSearch] = useState("");
       const [status, setStatus] = useState("");
@@ -3130,12 +3223,7 @@
           });
       }, [tasks, search, status, project, priority, dateFrom, dateTo, unfinishedOnly, feedbackOnly, attachmentFilter, sortBy, sortDirection]);
 
-      const openFromKeyboard = (event, task) => {
-        if (event.key === "Enter" || event.key === " ") {
-          event.preventDefault();
-          onOpen(task);
-        }
-      };
+      const openFromKeyboard = (event, task) => openTaskFromKeyboard(event, task, onOpen);
 
       return (
         <main className="table-view">
@@ -3241,6 +3329,396 @@
               </article>
             ))}
           </div>
+        </main>
+      );
+    }
+
+    const EXPORT_FIELDS = [
+      ["title", "任务标题"], ["project", "项目或类别"], ["source", "任务来源/指派人"],
+      ["receivedDate", "收到日期"], ["startDate", "开始日期"], ["deadline", "完成日期 / 最后期限"],
+      ["reminderAt", "提醒时间"], ["priority", "优先级"], ["status", "当前进展"],
+      ["workCycle", "工作周期（天）"], ["actualHours", "实际耗时（小时）"],
+      ["executionText", "执行清单"], ["executionStatus", "执行清单状态"],
+      ["executionDue", "执行清单目标时间"], ["executionReminder", "执行清单提醒时间"],
+      ["executionHours", "执行清单耗时"], ["feedbackNotes", "反馈/调整记录"],
+      ["attachments", "附件"], ["finalResults", "交付成果"], ["reviewItems", "复盘小结"],
+      ["createdAt", "创建时间"], ["updatedAt", "更新时间"]
+    ];
+    const DEFAULT_EXPORT_FIELDS = ["title", "project", "status", "startDate", "deadline", "actualHours", "executionText", "finalResults", "reviewItems"];
+
+    function dateForBasis(task, basis) {
+      if (basis === "receivedDate") return toDate(task.receivedDate);
+      if (basis === "startDate") return toDate(task.startDate);
+      if (basis === "deadline") return toDate(task.deadline);
+      return toDate(task.updatedAt) || createdDate(task);
+    }
+
+    function currentRange(mode) {
+      const now = new Date();
+      const start = new Date(now);
+      const end = new Date(now);
+      if (mode === "week") {
+        const day = now.getDay() || 7;
+        start.setDate(now.getDate() - day + 1);
+        end.setDate(start.getDate() + 6);
+      } else if (mode === "month") {
+        start.setDate(1);
+        end.setMonth(now.getMonth() + 1, 0);
+      } else if (mode === "year") {
+        start.setMonth(0, 1);
+        end.setMonth(11, 31);
+      }
+      return { from: dateKey(start), to: dateKey(end) };
+    }
+
+    function daysBetween(startValue, endValue) {
+      const start = toDate(startValue);
+      const end = toDate(endValue);
+      if (!start || !end) return null;
+      const diff = Math.round((dateKey(end) === dateKey(start) ? 0 : (end - start) / 86400000) + 1);
+      return diff > 0 ? diff : null;
+    }
+
+    function taskWorkCycle(task) {
+      return daysBetween(task.startDate, task.deadline);
+    }
+
+    function totalTaskHours(task) {
+      const taskHours = hoursNumber(task.actualHours);
+      if (taskHours !== null) return taskHours;
+      const stepHours = normalizeExecutionItems(task.executionItems, task)
+        .map(item => hoursNumber(item.actualHours))
+        .filter(value => value !== null);
+      return stepHours.length ? stepHours.reduce((sum, value) => sum + value, 0) : null;
+    }
+
+    function joinText(values) {
+      return values.filter(Boolean).join("\n");
+    }
+
+    function exportValue(task, field) {
+      const executionItems = normalizeExecutionItems(task.executionItems, task);
+      const taskHours = totalTaskHours(task);
+      const workCycle = taskWorkCycle(task);
+      const describeAttachment = attachment => attachment.type === "local"
+        ? `${attachment.fileName}｜本机文件，仅原电脑可用`
+        : `${attachment.fileName}${attachment.fileUrl ? `｜${attachment.fileUrl}` : ""}`;
+      const attachmentNames = [
+        ...(task.attachments || []).map(describeAttachment),
+        ...executionItems.flatMap(item => (item.attachments || []).map(file => `${item.text || "执行清单"}：${describeAttachment(file)}`)),
+        ...normalizeFinalResults(task.finalResults, task.finalResult).flatMap(item => (item.attachments || []).map(file => `${item.text || "交付成果"}：${describeAttachment(file)}`)),
+        ...normalizeReviewItems(task.reviewItems, task).flatMap(item => (item.attachments || []).map(file => `${item.text || "复盘小结"}：${describeAttachment(file)}`))
+      ];
+      const formattedExecution = executionItems.map((item, index) => {
+        const parts = [
+          `${index + 1}. ${item.text || "未命名步骤"}`,
+          item.status,
+          item.dueText && `目标：${formatDate(item.dueText) !== "—" ? dateKey(item.dueText).replace(/-/g, "/") : item.dueText}`,
+          item.actualHours && `耗时：${item.actualHours}h`,
+          item.feedbackNote && `反馈：${item.feedbackNote}`
+        ].filter(Boolean);
+        return parts.join("｜");
+      });
+      const map = {
+        title: task.title || "",
+        project: task.project || "",
+        source: task.source || "",
+        receivedDate: task.receivedDate || "",
+        startDate: task.startDate || "",
+        deadline: task.deadline || "",
+        reminderAt: displayReminder(task.reminderAt || task.reminder),
+        priority: normalizePriority(task.priority) || "优先级3",
+        status: statusTitle(task.status),
+        workCycle: workCycle === null ? "未填写" : String(workCycle),
+        actualHours: taskHours === null ? "未填写" : String(taskHours),
+        executionText: joinText(formattedExecution),
+        executionStatus: joinText(executionItems.map(item => `${item.text || "未命名步骤"}：${item.status}`)),
+        executionDue: joinText(executionItems.map(item => item.dueText ? `${item.text || "未命名步骤"}：${item.dueText}` : "")),
+        executionReminder: joinText(executionItems.map(item => item.reminderAt ? `${item.text || "未命名步骤"}：${displayReminder(item.reminderAt)}` : "")),
+        executionHours: joinText(executionItems.map(item => item.actualHours ? `${item.text || "未命名步骤"}：${item.actualHours}` : "")),
+        feedbackNotes: joinText(executionItems.map(item => item.feedbackNote)),
+        attachments: joinText(attachmentNames),
+        finalResults: joinText(normalizeFinalResults(task.finalResults, task.finalResult).map(item => item.text)),
+        reviewItems: joinText(normalizeReviewItems(task.reviewItems, task).map(item => item.text)),
+        createdAt: formatDate(createdDate(task), true),
+        updatedAt: formatDate(task.updatedAt, true)
+      };
+      return map[field] ?? "";
+    }
+
+    function csvCell(value) {
+      return `"${String(value ?? "").replace(/"/g, '""')}"`;
+    }
+
+    function downloadTextFile(content, fileName, type) {
+      const blob = new Blob([content], { type });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 30000);
+    }
+
+    function exportFileName(rangeMode) {
+      const now = new Date();
+      if (rangeMode === "week") {
+        const firstDay = new Date(now.getFullYear(), 0, 1);
+        const week = Math.ceil((((now - firstDay) / 86400000) + firstDay.getDay() + 1) / 7);
+        return `工作追踪-周报-${now.getFullYear()}-W${String(week).padStart(2, "0")}`;
+      }
+      if (rangeMode === "month") return `工作追踪-月报-${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+      if (rangeMode === "year") return `工作追踪-年报-${now.getFullYear()}`;
+      return `工作追踪-自定义-${dateKey(now)}`;
+    }
+
+    function StatsExportView({ tasks, onOpen, priorityOptions }) {
+      const [rangeMode, setRangeMode] = useState("week");
+      const defaultRange = currentRange("week");
+      const [customFrom, setCustomFrom] = useState(defaultRange.from);
+      const [customTo, setCustomTo] = useState(defaultRange.to);
+      const [dateBasis, setDateBasis] = useState("updatedAt");
+      const [projectFilter, setProjectFilter] = useState("");
+      const [statusFilter, setStatusFilter] = useState("");
+      const [priorityFilter, setPriorityFilter] = useState("");
+      const [search, setSearch] = useState("");
+      const [selectedFields, setSelectedFields] = useState(DEFAULT_EXPORT_FIELDS);
+
+      const projectOptions = useMemo(() => [...new Set(tasks.map(task => task.project).filter(Boolean))].sort((a, b) => a.localeCompare(b)), [tasks]);
+      const range = rangeMode === "custom" ? { from: customFrom, to: customTo } : currentRange(rangeMode);
+      const filteredTasks = useMemo(() => {
+        const fromTime = range.from ? toDate(range.from)?.getTime() : null;
+        const toTime = range.to ? toDate(range.to)?.getTime() + 86399999 : null;
+        const keyword = search.trim().toLowerCase();
+        return tasks.filter(task => {
+          const basisDate = dateForBasis(task, dateBasis);
+          if (fromTime && (!basisDate || basisDate.getTime() < fromTime)) return false;
+          if (toTime && (!basisDate || basisDate.getTime() > toTime)) return false;
+          if (projectFilter && task.project !== projectFilter) return false;
+          if (statusFilter && task.status !== statusFilter) return false;
+          if (priorityFilter && normalizePriority(task.priority) !== priorityFilter) return false;
+          if (keyword) {
+            const haystack = [
+              task.title, task.project, task.source,
+              ...normalizeExecutionItems(task.executionItems, task).map(item => `${item.text} ${item.feedbackNote}`),
+              ...normalizeFinalResults(task.finalResults, task.finalResult).map(item => item.text),
+              ...normalizeReviewItems(task.reviewItems, task).map(item => item.text)
+            ].join(" ").toLowerCase();
+            if (!haystack.includes(keyword)) return false;
+          }
+          return true;
+        });
+      }, [tasks, range.from, range.to, dateBasis, projectFilter, statusFilter, priorityFilter, search]);
+
+      const summary = useMemo(() => {
+        const completed = filteredTasks.filter(task => task.status === "done").length;
+        const inProgress = filteredTasks.filter(task => task.status === "inprogress").length;
+        const projects = new Set(filteredTasks.map(task => task.project).filter(Boolean)).size;
+        const hourValues = filteredTasks.map(totalTaskHours).filter(value => value !== null);
+        const cycleValues = filteredTasks.map(taskWorkCycle).filter(value => value !== null);
+        const overdue = filteredTasks.filter(task => task.status !== "done" && task.deadline && dateKey(task.deadline) < today()).length;
+        const totalHours = hourValues.reduce((sum, value) => sum + value, 0);
+        const totalCycle = cycleValues.reduce((sum, value) => sum + value, 0);
+        return {
+          total: filteredTasks.length,
+          completed,
+          inProgress,
+          projects,
+          totalHours,
+          averageHours: hourValues.length ? totalHours / hourValues.length : null,
+          overdue,
+          totalCycle,
+          averageCycle: cycleValues.length ? totalCycle / cycleValues.length : null
+        };
+      }, [filteredTasks]);
+
+      const projectSummary = useMemo(() => {
+        const groups = new Map();
+        filteredTasks.forEach(task => {
+          const key = task.project || "未分类";
+          if (!groups.has(key)) groups.set(key, { project: key, tasks: [], hours: [] });
+          const group = groups.get(key);
+          group.tasks.push(task);
+          const hours = totalTaskHours(task);
+          if (hours !== null) group.hours.push(hours);
+        });
+        return Array.from(groups.values()).map(group => {
+          const totalHours = group.hours.reduce((sum, value) => sum + value, 0);
+          return {
+            project: group.project,
+            count: group.tasks.length,
+            done: group.tasks.filter(task => task.status === "done").length,
+            inprogress: group.tasks.filter(task => task.status === "inprogress").length,
+            newCount: group.tasks.filter(task => task.status === "new").length,
+            totalHours,
+            averageHours: group.hours.length ? totalHours / group.hours.length : null,
+            updatedAt: group.tasks.map(task => toDate(task.updatedAt)).filter(Boolean).sort((a, b) => b - a)[0]
+          };
+        }).sort((a, b) => b.count - a.count || a.project.localeCompare(b.project));
+      }, [filteredTasks]);
+
+      const toggleField = key => {
+        setSelectedFields(current => current.includes(key) ? current.filter(item => item !== key) : [...current, key]);
+      };
+
+      const exportRows = () => {
+        const fields = selectedFields.length ? selectedFields : DEFAULT_EXPORT_FIELDS;
+        const headers = fields.map(key => EXPORT_FIELDS.find(([field]) => field === key)?.[1] || key);
+        return [headers, ...filteredTasks.map(task => fields.map(field => exportValue(task, field)))];
+      };
+
+      const exportCSV = () => {
+        const csv = "\ufeff" + exportRows().map(row => row.map(csvCell).join(",")).join("\r\n");
+        downloadTextFile(csv, `${exportFileName(rangeMode)}.csv`, "text/csv;charset=utf-8");
+      };
+
+      const exportExcel = () => {
+        const rows = exportRows();
+        const html = `\ufeff<html><head><meta charset="UTF-8"></head><body><table>${rows.map((row, index) => `<tr>${row.map(cell => `<${index ? "td" : "th"}>${String(cell ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\n/g, "<br>")}</${index ? "td" : "th"}>`).join("")}</tr>`).join("")}</table></body></html>`;
+        downloadTextFile(html, `${exportFileName(rangeMode)}.xls`, "application/vnd.ms-excel;charset=utf-8");
+      };
+
+      return (
+        <main className="stats-export-view">
+          <section className="stats-panel">
+            <div className="stats-filter-grid">
+              <div className="filter-field">
+                <label>时间范围</label>
+                <select value={rangeMode} onChange={event => setRangeMode(event.target.value)}>
+                  <option value="week">本周</option>
+                  <option value="month">本月</option>
+                  <option value="year">本年</option>
+                  <option value="custom">自定义</option>
+                </select>
+              </div>
+              <div className="filter-field">
+                <label>日期依据</label>
+                <select value={dateBasis} onChange={event => setDateBasis(event.target.value)}>
+                  <option value="receivedDate">收到日期</option>
+                  <option value="startDate">开始日期</option>
+                  <option value="deadline">完成日期</option>
+                  <option value="updatedAt">更新时间</option>
+                </select>
+              </div>
+              {rangeMode === "custom" && (
+                <>
+                  <div className="filter-field"><label>开始</label><input type="date" value={customFrom} onChange={event => setCustomFrom(event.target.value)} /></div>
+                  <div className="filter-field"><label>结束</label><input type="date" value={customTo} onChange={event => setCustomTo(event.target.value)} /></div>
+                </>
+              )}
+              <div className="filter-field">
+                <label>项目或类别</label>
+                <select value={projectFilter} onChange={event => setProjectFilter(event.target.value)}>
+                  <option value="">全部</option>
+                  {projectOptions.map(project => <option key={project} value={project}>{project}</option>)}
+                </select>
+              </div>
+              <div className="filter-field">
+                <label>状态</label>
+                <select value={statusFilter} onChange={event => setStatusFilter(event.target.value)}>
+                  <option value="">全部</option>
+                  {COLUMNS.map(column => <option key={column.id} value={column.id}>{column.title}</option>)}
+                </select>
+              </div>
+              <div className="filter-field">
+                <label>优先级</label>
+                <select value={priorityFilter} onChange={event => setPriorityFilter(event.target.value)}>
+                  <option value="">全部</option>
+                  {priorityOptions.map(priority => <option key={priority} value={priority}>{priority}</option>)}
+                </select>
+              </div>
+              <div className="filter-field full">
+                <label>搜索关键词</label>
+                <input value={search} onChange={event => setSearch(event.target.value)} placeholder="搜索任务标题、项目、执行清单、交付成果、复盘小结" />
+              </div>
+            </div>
+          </section>
+
+          <section className="summary-cards">
+            <div className="summary-card"><span>任务总数</span><strong>{summary.total}</strong></div>
+            <div className="summary-card"><span>已完成任务</span><strong>{summary.completed}</strong></div>
+            <div className="summary-card"><span>进行中任务</span><strong>{summary.inProgress}</strong></div>
+            <div className="summary-card"><span>项目数量</span><strong>{summary.projects}</strong></div>
+            <div className="summary-card"><span>实际耗时合计</span><strong>{summary.totalHours ? summary.totalHours.toFixed(1) : "0"} 小时</strong></div>
+            <div className="summary-card"><span>平均任务耗时</span><strong>{summary.averageHours === null ? "未填写" : `${summary.averageHours.toFixed(1)} 小时`}</strong></div>
+            <div className="summary-card"><span>已逾期任务</span><strong>{summary.overdue}</strong></div>
+            <div className="summary-card"><span>工作周期合计 / 平均</span><strong>{summary.totalCycle || 0} 天 / {summary.averageCycle === null ? "未填写" : `${summary.averageCycle.toFixed(1)} 天`}</strong></div>
+          </section>
+
+          <section className="stats-section">
+            <h2>项目汇总</h2>
+            <div className="task-table-wrap">
+              <table className="task-table stats-table">
+                <thead><tr><th>项目或类别</th><th>任务数</th><th>已完成</th><th>进行中</th><th>收集箱</th><th>实际耗时合计</th><th>平均耗时</th><th>最近更新时间</th></tr></thead>
+                <tbody>
+                  {projectSummary.map(row => (
+                    <tr key={row.project} onClick={() => row.project !== "未分类" && setProjectFilter(row.project)}>
+                      <td className="table-title">{row.project}</td>
+                      <td>{row.count}</td>
+                      <td>{row.done}</td>
+                      <td>{row.inprogress}</td>
+                      <td>{row.newCount}</td>
+                      <td>{row.totalHours ? row.totalHours.toFixed(1) : "0"}</td>
+                      <td>{row.averageHours === null ? "未填写" : row.averageHours.toFixed(1)}</td>
+                      <td>{formatDate(row.updatedAt, true)}</td>
+                    </tr>
+                  ))}
+                  {!projectSummary.length && <tr><td colSpan="8">当前筛选范围内没有任务。</td></tr>}
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <section className="stats-section">
+            <div className="export-header">
+              <div>
+                <h2>导出字段</h2>
+                <p>只导出当前筛选后的任务和已勾选字段。</p>
+              </div>
+              <div className="quick-actions">
+                <button className="btn btn-secondary" onClick={() => setSelectedFields(DEFAULT_EXPORT_FIELDS)}>周/月报默认字段</button>
+                <button className="btn btn-primary" onClick={exportCSV}>导出CSV</button>
+                <button className="btn btn-secondary" onClick={exportExcel}>导出Excel</button>
+              </div>
+            </div>
+            <div className="export-field-list">
+              {EXPORT_FIELDS.map(([key, label]) => (
+                <label key={key} className="check-label"><input type="checkbox" checked={selectedFields.includes(key)} onChange={() => toggleField(key)} /> {label}</label>
+              ))}
+            </div>
+          </section>
+
+          <section className="stats-section">
+            <h2>任务导出预览</h2>
+            <p className="results-summary">当前预览 {filteredTasks.length} 个任务</p>
+            <div className="task-table-wrap">
+              <table className="task-table export-preview-table">
+                <thead><tr><th>任务标题</th><th>项目或类别</th><th>来源/指派人</th><th>收到日期</th><th>开始日期</th><th>完成日期 / 最后期限</th><th>优先级</th><th>当前进展</th><th>工作周期</th><th>实际耗时</th><th>执行清单摘要</th><th>交付成果摘要</th><th>复盘小结摘要</th></tr></thead>
+                <tbody>
+                  {filteredTasks.map(task => (
+                    <tr key={task.id} tabIndex="0" onClick={() => onOpen(task)} onKeyDown={event => openTaskFromKeyboard(event, task, onOpen)}>
+                      <td className="table-title">{task.title}</td>
+                      <td>{task.project || "—"}</td>
+                      <td>{task.source || "—"}</td>
+                      <td>{formatDate(task.receivedDate)}</td>
+                      <td>{formatDate(task.startDate)}</td>
+                      <td>{formatDate(task.deadline)}</td>
+                      <td>{normalizePriority(task.priority) || "优先级3"}</td>
+                      <td>{statusTitle(task.status)}</td>
+                      <td>{taskWorkCycle(task) === null ? "未填写" : `${taskWorkCycle(task)} 天`}</td>
+                      <td>{formatHours(totalTaskHours(task))}</td>
+                      <td><span className="table-summary">{joinText(normalizeExecutionItems(task.executionItems, task).map(item => `${item.text}${item.actualHours ? `（${item.actualHours}小时）` : ""}`)) || "—"}</span></td>
+                      <td><span className="table-summary">{joinText(normalizeFinalResults(task.finalResults, task.finalResult).map(item => item.text)) || "—"}</span></td>
+                      <td><span className="table-summary">{joinText(normalizeReviewItems(task.reviewItems, task).map(item => item.text)) || "—"}</span></td>
+                    </tr>
+                  ))}
+                  {!filteredTasks.length && <tr><td colSpan="13">当前筛选范围内没有任务。</td></tr>}
+                </tbody>
+              </table>
+            </div>
+          </section>
         </main>
       );
     }
@@ -3579,8 +4057,9 @@
                 <>
                   <div className="view-toolbar">
                     <div className="view-switcher" aria-label="Choose task view">
-                      <button className={`view-button${view === "kanban" ? " active" : ""}`} onClick={() => setView("kanban")}>Kanban View</button>
-                      <button className={`view-button${view === "table" ? " active" : ""}`} onClick={() => setView("table")}>Table View</button>
+                      <button className={`view-button${view === "kanban" ? " active" : ""}`} onClick={() => setView("kanban")}>看板视图</button>
+                      <button className={`view-button${view === "table" ? " active" : ""}`} onClick={() => setView("table")}>表格视图</button>
+                      <button className={`view-button${view === "stats" ? " active" : ""}`} onClick={() => setView("stats")}>统计导出</button>
                     </div>
                   </div>
                   {view === "kanban" ? (
@@ -3589,7 +4068,7 @@
                         <Column key={column.id} column={column} tasks={tasks.filter(task => task.status === column.id)} onAdd={openNew} onOpen={openExisting} onDelete={deleteTask} onDragStart={startDrag} onDragEnd={endDrag} onDragOver={(event, status) => { event.preventDefault(); setDragOver(status); }} onDrop={drop} isOver={dragOver === column.id} />
                       ))}
                     </main>
-                  ) : <TableView tasks={tasks} onOpen={openExisting} />}
+                  ) : view === "table" ? <TableView tasks={tasks} onOpen={openExisting} /> : <StatsExportView tasks={tasks} onOpen={openExisting} priorityOptions={availablePriorityOptions} />}
                 </>
               )}
             </>
