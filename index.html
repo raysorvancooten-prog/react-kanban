@@ -1191,9 +1191,25 @@
     const emptyParsedResult = () => Object.fromEntries(PARSED_FIELDS.map(([key]) => [key, ""]));
 
     function loadAISettings() {
-      const defaults = { provider: "OpenAI-compatible", endpoint: "", apiKey: "", model: "" };
+      const defaults = {
+        aiProvider: "rule",
+        openaiApiKey: "",
+        openaiModel: "",
+        geminiApiKey: "",
+        geminiModel: "gemini-3.5-flash"
+      };
       try {
-        return { ...defaults, ...JSON.parse(localStorage.getItem(AI_SETTINGS_KEY) || "{}") };
+        const saved = JSON.parse(localStorage.getItem(AI_SETTINGS_KEY) || "{}");
+        const migratedProvider = saved.aiProvider || (saved.provider && saved.provider !== "OpenAI-compatible" ? saved.provider : (saved.apiKey ? "openai" : "rule"));
+        return {
+          ...defaults,
+          ...saved,
+          aiProvider: ["rule", "openai", "gemini"].includes(String(migratedProvider).toLowerCase()) ? String(migratedProvider).toLowerCase() : "rule",
+          openaiApiKey: saved.openaiApiKey || saved.apiKey || "",
+          openaiModel: saved.openaiModel || saved.model || "",
+          geminiApiKey: saved.geminiApiKey || "",
+          geminiModel: saved.geminiModel || "gemini-3.5-flash"
+        };
       } catch {
         return defaults;
       }
@@ -2024,29 +2040,51 @@
       const change = event => setForm({ ...form, [event.target.name]: event.target.value });
       const save = event => {
         event.preventDefault();
-        const next = { provider: form.provider.trim() || "OpenAI-compatible", endpoint: form.endpoint.trim(), apiKey: form.apiKey.trim(), model: form.model.trim() };
+        const next = {
+          aiProvider: form.aiProvider || "rule",
+          openaiApiKey: (form.openaiApiKey || "").trim(),
+          openaiModel: (form.openaiModel || "").trim(),
+          geminiApiKey: (form.geminiApiKey || "").trim(),
+          geminiModel: (form.geminiModel || "").trim() || "gemini-3.5-flash"
+        };
         localStorage.setItem(AI_SETTINGS_KEY, JSON.stringify(next));
         onSave(next);
         onClose();
       };
 
       return (
-        <div className={`modal-backdrop${expanded ? " full-window" : ""}`} onMouseDown={event => event.target === event.currentTarget && onClose()}>
+        <div className="modal-backdrop" onMouseDown={event => event.target === event.currentTarget && onClose()}>
           <form className="modal settings-modal" onSubmit={save}>
             <div className="modal-header">
-              <div><h2>AI settings</h2><p>Configure the service used by 智能入口.</p></div>
+              <div><h2>AI设置</h2><p>配置智能入口使用的解析服务。密钥只保存在当前浏览器。</p></div>
               <button type="button" className="close-button" aria-label="Close" onClick={onClose}>×</button>
             </div>
             <div className="form-body">
-              <p className="settings-warning">Do not use a shared or public API key. The key is stored only in this browser.</p>
+              <p className="settings-warning">不要使用共享或公开 API Key。Key 只存储在当前浏览器 localStorage，不会保存到 Firestore，也不会上传到服务器。</p>
               <div className="form-grid">
-                <div className="field full"><label htmlFor="aiProvider">AI Provider</label><input id="aiProvider" name="provider" value={form.provider} onChange={change} placeholder="OpenAI-compatible" /></div>
-                <div className="field full"><label htmlFor="aiEndpoint">API endpoint</label><input id="aiEndpoint" name="endpoint" value={form.endpoint} onChange={change} placeholder="https://api.example.com/v1/chat/completions" /></div>
-                <div className="field full"><label htmlFor="aiKey">API key</label><input id="aiKey" type="password" name="apiKey" value={form.apiKey} onChange={change} autoComplete="off" /></div>
-                <div className="field full"><label htmlFor="aiModel">Model name</label><input id="aiModel" name="model" value={form.model} onChange={change} placeholder="Your provider's model name" /></div>
+                <div className="field full">
+                  <label htmlFor="aiProvider">AI服务商</label>
+                  <select id="aiProvider" name="aiProvider" value={form.aiProvider || "rule"} onChange={change}>
+                    <option value="rule">规则解析</option>
+                    <option value="openai">OpenAI</option>
+                    <option value="gemini">Gemini</option>
+                  </select>
+                </div>
+                {(form.aiProvider || "rule") === "openai" && (
+                  <>
+                    <div className="field full"><label htmlFor="openaiApiKey">OpenAI API Key</label><input id="openaiApiKey" type="password" name="openaiApiKey" value={form.openaiApiKey || ""} onChange={change} autoComplete="off" placeholder="只保存在当前浏览器" /></div>
+                    <div className="field full"><label htmlFor="openaiModel">OpenAI model</label><input id="openaiModel" name="openaiModel" value={form.openaiModel || ""} onChange={change} placeholder="例如：gpt-4o-mini，可手动修改" /></div>
+                  </>
+                )}
+                {(form.aiProvider || "rule") === "gemini" && (
+                  <>
+                    <div className="field full"><label htmlFor="geminiApiKey">Gemini API Key</label><input id="geminiApiKey" type="password" name="geminiApiKey" value={form.geminiApiKey || ""} onChange={change} autoComplete="off" placeholder="只保存在当前浏览器" /></div>
+                    <div className="field full"><label htmlFor="geminiModel">Gemini model</label><input id="geminiModel" name="geminiModel" value={form.geminiModel || "gemini-3.5-flash"} onChange={change} placeholder="gemini-3.5-flash" /></div>
+                  </>
+                )}
               </div>
             </div>
-            <div className="modal-actions"><div></div><div className="settings-actions"><button type="button" className="btn btn-secondary" onClick={onClose}>Cancel</button><button className="btn btn-primary">Save settings</button></div></div>
+            <div className="modal-actions"><div></div><div className="settings-actions"><button type="button" className="btn btn-secondary" onClick={onClose}>取消</button><button className="btn btn-primary">保存设置</button></div></div>
           </form>
         </div>
       );
@@ -2502,11 +2540,30 @@
           setParseMessage("Enter or dictate a task description first.");
           return;
         }
-        if (!aiSettings.endpoint || !aiSettings.apiKey || !aiSettings.model) {
+        const provider = aiSettings.aiProvider || "rule";
+        if (provider === "rule") {
           fillParsedResult(
             ruleParse(quickText),
             "规则解析模式",
-            "AI未配置，请先设置AI接口。当前为规则解析模式，结果仅供临时参考。建议配置 AI 后再测试智能拆解。",
+            "当前选择的是规则解析模式，结果仅供临时参考。如需 AI 智能拆解，请在 AI设置 中选择 OpenAI 或 Gemini 并填写自己的 API Key。",
+            false
+          );
+          return;
+        }
+        if (provider === "openai" && (!aiSettings.openaiApiKey || !aiSettings.openaiModel)) {
+          fillParsedResult(
+            ruleParse(quickText),
+            "规则解析模式",
+            "OpenAI 未配置，请先在 AI设置 中填写 OpenAI API Key 和 model。当前为规则解析模式，结果仅供临时参考。",
+            false
+          );
+          return;
+        }
+        if (provider === "gemini" && (!aiSettings.geminiApiKey || !aiSettings.geminiModel)) {
+          fillParsedResult(
+            ruleParse(quickText),
+            "规则解析模式",
+            "Gemini 未配置，请先在 AI设置 中填写 Gemini API Key 和 model。当前为规则解析模式，结果仅供临时参考。",
             false
           );
           return;
@@ -2517,31 +2574,54 @@
         const schema = { ...Object.fromEntries(PARSED_FIELDS.map(([key]) => [key, ""])), executionItems: [{ text: "", status: "", dueText: "", reminderAt: "", actualHours: "", feedbackNote: "" }], reviewSummary: "" };
         const systemPrompt = `You extract task fields from Chinese or English text. Return one JSON object only, with exactly this schema: ${JSON.stringify(schema)}. If information is not explicitly stated, use an empty string. Never invent information. Dates must be YYYY-MM-DD. Today is ${dateKey(new Date())}. Priority must be 优先级1, 优先级2, 优先级3, an explicit custom priority such as 优先级4, or empty. Status must be New, To Do, In Progress, Waiting for Feedback, Done, Archived, or empty. actualHours must be a number string in hours only when explicitly stated.`;
         try {
-          const response = await fetch(aiSettings.endpoint, {
-            method: "POST",
-            headers: { "Content-Type": "application/json", "Authorization": `Bearer ${aiSettings.apiKey}` },
-            body: JSON.stringify({
-              model: aiSettings.model,
-              messages: [
-                { role: "system", content: systemPrompt },
-                { role: "user", content: quickText }
-              ],
-              temperature: 0,
-              response_format: { type: "json_object" }
-            })
-          });
-          if (!response.ok) throw new Error(`API request failed (${response.status})`);
-          const data = await response.json();
-          let content = data.choices?.[0]?.message?.content ?? data.output_text;
-          if (!content && Array.isArray(data.output)) {
-            content = data.output.flatMap(item => item.content || []).map(item => item.text || item.content || "").join("");
+          let content = "";
+          if (provider === "gemini") {
+            const modelName = encodeURIComponent(aiSettings.geminiModel || "gemini-3.5-flash");
+            const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json", "x-goog-api-key": aiSettings.geminiApiKey },
+              body: JSON.stringify({
+                contents: [{
+                  role: "user",
+                  parts: [{ text: `${systemPrompt}\n\nUser input:\n${quickText}\n\nReturn strict JSON only. Do not wrap it in markdown.` }]
+                }],
+                generationConfig: {
+                  temperature: 0,
+                  responseMimeType: "application/json"
+                }
+              })
+            });
+            if (!response.ok) throw new Error(`Gemini request failed (${response.status})`);
+            const data = await response.json();
+            content = data.candidates?.[0]?.content?.parts?.map(part => part.text || "").join("") || "";
+          } else {
+            const response = await fetch("https://api.openai.com/v1/chat/completions", {
+              method: "POST",
+              headers: { "Content-Type": "application/json", "Authorization": `Bearer ${aiSettings.openaiApiKey}` },
+              body: JSON.stringify({
+                model: aiSettings.openaiModel,
+                messages: [
+                  { role: "system", content: systemPrompt },
+                  { role: "user", content: quickText }
+                ],
+                temperature: 0,
+                response_format: { type: "json_object" }
+              })
+            });
+            if (!response.ok) throw new Error(`OpenAI request failed (${response.status})`);
+            const data = await response.json();
+            content = data.choices?.[0]?.message?.content ?? data.output_text;
+            if (!content && Array.isArray(data.output)) {
+              content = data.output.flatMap(item => item.content || []).map(item => item.text || item.content || "").join("");
+            }
           }
           if (typeof content === "object") content = JSON.stringify(content);
           content = String(content || "").replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
+          if (!content) throw new Error("AI returned empty content");
           fillParsedResult(normalizeParsedResult(JSON.parse(content)), "AI解析模式", "AI解析完成。确认后点击“应用解析结果”。", false);
         } catch (error) {
           console.error("AI parsing failed", error);
-          setParseMessage(`AI Parse failed: ${error.message}. Check the endpoint, model, key, and browser CORS support.`);
+          setParseMessage(`AI解析失败：${error.message}。不会自动保存任何数据。你可以检查 API Key / model，或改用“规则解析”。`);
         } finally {
           setParsing(false);
         }
