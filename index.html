@@ -1284,19 +1284,38 @@
         openaiApiKey: "",
         openaiModel: "",
         geminiApiKey: "",
-        geminiModel: "gemini-2.5-flash"
+        geminiModel: "gemini-2.5-flash",
+        doubaoApiKey: "",
+        doubaoModel: "",
+        doubaoEndpoint: "https://ark.cn-beijing.volces.com/api/v3/chat/completions",
+        qwenApiKey: "",
+        qwenModel: "qwen-plus",
+        qwenEndpoint: "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions",
+        deepseekApiKey: "",
+        deepseekModel: "deepseek-chat",
+        deepseekEndpoint: "https://api.deepseek.com/chat/completions"
       };
       try {
         const saved = JSON.parse(localStorage.getItem(AI_SETTINGS_KEY) || "{}");
         const migratedProvider = saved.aiProvider || (saved.provider && saved.provider !== "OpenAI-compatible" ? saved.provider : (saved.apiKey ? "openai" : "rule"));
+        const allowedProviders = ["rule", "openai", "gemini", "doubao", "qwen", "deepseek"];
         return {
           ...defaults,
           ...saved,
-          aiProvider: ["rule", "openai", "gemini"].includes(String(migratedProvider).toLowerCase()) ? String(migratedProvider).toLowerCase() : "rule",
+          aiProvider: allowedProviders.includes(String(migratedProvider).toLowerCase()) ? String(migratedProvider).toLowerCase() : "rule",
           openaiApiKey: saved.openaiApiKey || saved.apiKey || "",
           openaiModel: saved.openaiModel || saved.model || "",
           geminiApiKey: saved.geminiApiKey || "",
-          geminiModel: saved.geminiModel || "gemini-2.5-flash"
+          geminiModel: saved.geminiModel || "gemini-2.5-flash",
+          doubaoApiKey: saved.doubaoApiKey || "",
+          doubaoModel: saved.doubaoModel || "",
+          doubaoEndpoint: saved.doubaoEndpoint || defaults.doubaoEndpoint,
+          qwenApiKey: saved.qwenApiKey || "",
+          qwenModel: saved.qwenModel || "qwen-plus",
+          qwenEndpoint: saved.qwenEndpoint || defaults.qwenEndpoint,
+          deepseekApiKey: saved.deepseekApiKey || "",
+          deepseekModel: saved.deepseekModel || "deepseek-chat",
+          deepseekEndpoint: saved.deepseekEndpoint || defaults.deepseekEndpoint
         };
       } catch {
         return defaults;
@@ -2170,7 +2189,16 @@
           openaiApiKey: (form.openaiApiKey || "").trim(),
           openaiModel: (form.openaiModel || "").trim(),
           geminiApiKey: (form.geminiApiKey || "").trim(),
-          geminiModel: (form.geminiModel || "").trim() || "gemini-2.5-flash"
+          geminiModel: (form.geminiModel || "").trim() || "gemini-2.5-flash",
+          doubaoApiKey: (form.doubaoApiKey || "").trim(),
+          doubaoModel: (form.doubaoModel || "").trim(),
+          doubaoEndpoint: (form.doubaoEndpoint || "").trim() || "https://ark.cn-beijing.volces.com/api/v3/chat/completions",
+          qwenApiKey: (form.qwenApiKey || "").trim(),
+          qwenModel: (form.qwenModel || "").trim() || "qwen-plus",
+          qwenEndpoint: (form.qwenEndpoint || "").trim() || "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions",
+          deepseekApiKey: (form.deepseekApiKey || "").trim(),
+          deepseekModel: (form.deepseekModel || "").trim() || "deepseek-chat",
+          deepseekEndpoint: (form.deepseekEndpoint || "").trim() || "https://api.deepseek.com/chat/completions"
         };
         localStorage.setItem(AI_SETTINGS_KEY, JSON.stringify(next));
         onSave(next);
@@ -2193,6 +2221,9 @@
                     <option value="rule">规则解析</option>
                     <option value="openai">OpenAI</option>
                     <option value="gemini">Gemini</option>
+                    <option value="doubao">豆包</option>
+                    <option value="qwen">千问</option>
+                    <option value="deepseek">DeepSeek</option>
                   </select>
                 </div>
                 {(form.aiProvider || "rule") === "openai" && (
@@ -2205,6 +2236,27 @@
                   <>
                     <div className="field full"><label htmlFor="geminiApiKey">Gemini API Key</label><input id="geminiApiKey" type="password" name="geminiApiKey" value={form.geminiApiKey || ""} onChange={change} autoComplete="off" placeholder="只保存在当前浏览器" /></div>
                     <div className="field full"><label htmlFor="geminiModel">Gemini model</label><input id="geminiModel" name="geminiModel" value={form.geminiModel || "gemini-2.5-flash"} onChange={change} placeholder="gemini-2.5-flash" /></div>
+                  </>
+                )}
+                {(form.aiProvider || "rule") === "doubao" && (
+                  <>
+                    <div className="field full"><label htmlFor="doubaoApiKey">豆包 API Key</label><input id="doubaoApiKey" type="password" name="doubaoApiKey" value={form.doubaoApiKey || ""} onChange={change} autoComplete="off" placeholder="只保存在当前浏览器" /></div>
+                    <div className="field full"><label htmlFor="doubaoModel">豆包模型</label><input id="doubaoModel" name="doubaoModel" value={form.doubaoModel || ""} onChange={change} placeholder="填写你的豆包/火山方舟模型或 endpoint id" /></div>
+                    <div className="field full"><label htmlFor="doubaoEndpoint">豆包 API 地址</label><input id="doubaoEndpoint" name="doubaoEndpoint" value={form.doubaoEndpoint || "https://ark.cn-beijing.volces.com/api/v3/chat/completions"} onChange={change} /></div>
+                  </>
+                )}
+                {(form.aiProvider || "rule") === "qwen" && (
+                  <>
+                    <div className="field full"><label htmlFor="qwenApiKey">千问 API Key</label><input id="qwenApiKey" type="password" name="qwenApiKey" value={form.qwenApiKey || ""} onChange={change} autoComplete="off" placeholder="只保存在当前浏览器" /></div>
+                    <div className="field full"><label htmlFor="qwenModel">千问模型</label><input id="qwenModel" name="qwenModel" value={form.qwenModel || "qwen-plus"} onChange={change} placeholder="qwen-plus" /></div>
+                    <div className="field full"><label htmlFor="qwenEndpoint">千问 API 地址</label><input id="qwenEndpoint" name="qwenEndpoint" value={form.qwenEndpoint || "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions"} onChange={change} /></div>
+                  </>
+                )}
+                {(form.aiProvider || "rule") === "deepseek" && (
+                  <>
+                    <div className="field full"><label htmlFor="deepseekApiKey">DeepSeek API Key</label><input id="deepseekApiKey" type="password" name="deepseekApiKey" value={form.deepseekApiKey || ""} onChange={change} autoComplete="off" placeholder="只保存在当前浏览器" /></div>
+                    <div className="field full"><label htmlFor="deepseekModel">DeepSeek 模型</label><input id="deepseekModel" name="deepseekModel" value={form.deepseekModel || "deepseek-chat"} onChange={change} placeholder="deepseek-chat" /></div>
+                    <div className="field full"><label htmlFor="deepseekEndpoint">DeepSeek API 地址</label><input id="deepseekEndpoint" name="deepseekEndpoint" value={form.deepseekEndpoint || "https://api.deepseek.com/chat/completions"} onChange={change} /></div>
                   </>
                 )}
               </div>
@@ -2725,6 +2777,22 @@
           );
           return;
         }
+        const openAICompatibleProviders = {
+          openai: { label: "OpenAI", apiKey: aiSettings.openaiApiKey, model: aiSettings.openaiModel, endpoint: "https://api.openai.com/v1/chat/completions" },
+          doubao: { label: "豆包", apiKey: aiSettings.doubaoApiKey, model: aiSettings.doubaoModel, endpoint: aiSettings.doubaoEndpoint || "https://ark.cn-beijing.volces.com/api/v3/chat/completions" },
+          qwen: { label: "千问", apiKey: aiSettings.qwenApiKey, model: aiSettings.qwenModel, endpoint: aiSettings.qwenEndpoint || "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions" },
+          deepseek: { label: "DeepSeek", apiKey: aiSettings.deepseekApiKey, model: aiSettings.deepseekModel, endpoint: aiSettings.deepseekEndpoint || "https://api.deepseek.com/chat/completions" }
+        };
+        const compatibleConfig = openAICompatibleProviders[provider];
+        if (compatibleConfig && (!compatibleConfig.apiKey || !compatibleConfig.model || !compatibleConfig.endpoint)) {
+          fillParsedResult(
+            ruleParse(quickText),
+            "规则解析模式",
+            `${compatibleConfig.label} 未配置，请先在 AI设置 中填写 API Key、模型和 API 地址。当前为规则解析模式，结果仅供临时参考。`,
+            false
+          );
+          return;
+        }
 
         setParsing(true);
         setParseMessage("");
@@ -2800,11 +2868,11 @@ Return strict JSON only. No markdown. No explanation. No code fence.`;
             const data = await response.json();
             content = data.candidates?.[0]?.content?.parts?.map(part => part.text || "").join("") || "";
           } else {
-            const response = await fetch("https://api.openai.com/v1/chat/completions", {
+            const response = await fetch(compatibleConfig.endpoint, {
               method: "POST",
-              headers: { "Content-Type": "application/json", "Authorization": `Bearer ${aiSettings.openaiApiKey}` },
+              headers: { "Content-Type": "application/json", "Authorization": `Bearer ${compatibleConfig.apiKey}` },
               body: JSON.stringify({
-                model: aiSettings.openaiModel,
+                model: compatibleConfig.model,
                 messages: [
                   { role: "system", content: systemPrompt },
                   { role: "user", content: quickText }
@@ -2813,7 +2881,7 @@ Return strict JSON only. No markdown. No explanation. No code fence.`;
                 response_format: { type: "json_object" }
               })
             });
-            if (!response.ok) throw new Error(`OpenAI request failed (${response.status})`);
+            if (!response.ok) throw new Error(`${compatibleConfig.label} request failed (${response.status})`);
             const data = await response.json();
             content = data.choices?.[0]?.message?.content ?? data.output_text;
             if (!content && Array.isArray(data.output)) {
