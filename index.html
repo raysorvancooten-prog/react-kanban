@@ -208,6 +208,13 @@
     .welcome-card { width: min(560px, 100%); padding: 2rem; border: 1px solid var(--border); border-radius: 14px; background: var(--surface); box-shadow: 0 8px 28px rgba(15, 23, 42, .08); text-align: center; }
     .welcome-card h2 { margin: 0 0 .65rem; }
     .welcome-card p { margin: 0 auto 1.25rem; color: var(--muted); line-height: 1.6; }
+    .email-auth-form { display: grid; gap: .8rem; margin: 1rem 0; text-align: left; }
+    .email-auth-form .field { display: grid; gap: .35rem; }
+    .email-auth-form input { width: 100%; border: 1px solid var(--border); border-radius: 10px; padding: .72rem .85rem; color: var(--text); font: inherit; }
+    .email-auth-actions { display: flex; flex-wrap: wrap; gap: .55rem; }
+    .email-auth-actions .btn { flex: 1 1 120px; }
+    .auth-divider { display: flex; align-items: center; gap: .7rem; margin: 1rem 0; color: var(--muted); font-size: .75rem; }
+    .auth-divider::before, .auth-divider::after { height: 1px; flex: 1; background: var(--border); content: ""; }
     .setup-note, .error-note { margin-top: 1rem; border-radius: 8px; padding: .75rem; font-size: .78rem; line-height: 1.45; text-align: left; }
     .setup-note { background: #fff7ed; color: #9a3412; }
     .error-note { background: #fef2f2; color: #b91c1c; }
@@ -405,10 +412,13 @@
     import { initializeApp } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-app.js";
     import {
       browserLocalPersistence,
+      createUserWithEmailAndPassword,
       getAuth,
       GoogleAuthProvider,
       onAuthStateChanged,
+      sendPasswordResetEmail,
       setPersistence,
+      signInWithEmailAndPassword,
       signInWithPopup,
       signOut
     } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-auth.js";
@@ -449,8 +459,11 @@
           auth,
           db,
           GoogleAuthProvider,
+          createUserWithEmailAndPassword,
           onAuthStateChanged,
+          sendPasswordResetEmail,
           signInWithPopup,
+          signInWithEmailAndPassword,
           signOut,
           collection,
           doc,
@@ -4086,6 +4099,8 @@ Return strict JSON only. No markdown. No explanation. No code fence.`;
       const [remoteReady, setRemoteReady] = useState(false);
       const [syncStatus, setSyncStatus] = useState("Not signed in");
       const [message, setMessage] = useState("");
+      const [emailForm, setEmailForm] = useState({ email: "", password: "" });
+      const [emailBusy, setEmailBusy] = useState(false);
       const [localTasks, setLocalTasks] = useState(loadLocalTasks);
       const [view, setView] = useState("kanban");
       const [aiSettings, setAISettings] = useState(loadAISettings);
@@ -4232,6 +4247,86 @@ Return strict JSON only. No markdown. No explanation. No code fence.`;
           setMessage(error.code === "auth/popup-blocked"
             ? "The sign-in window was blocked. Allow pop-ups for this page and try again."
             : "Google sign-in failed. Check the Firebase authorized domains and try again.");
+        }
+      };
+
+      const updateEmailForm = event => {
+        const { name, value } = event.target;
+        setEmailForm(previous => ({ ...previous, [name]: value }));
+      };
+
+      const getEmailCredentials = () => {
+        const email = emailForm.email.trim();
+        const password = emailForm.password;
+        if (!email) {
+          setMessage("请先输入邮箱地址。");
+          return null;
+        }
+        if (!password) {
+          setMessage("请先输入密码。");
+          return null;
+        }
+        if (password.length < 6) {
+          setMessage("密码至少需要 6 位。");
+          return null;
+        }
+        return { email, password };
+      };
+
+      const signInWithEmail = async event => {
+        event?.preventDefault();
+        if (!services?.configured || emailBusy) return;
+        const credentials = getEmailCredentials();
+        if (!credentials) return;
+        setEmailBusy(true);
+        setMessage("");
+        try {
+          await services.signInWithEmailAndPassword(services.auth, credentials.email, credentials.password);
+        } catch (error) {
+          console.error("Email sign-in failed", error);
+          setMessage(error.code === "auth/invalid-credential" || error.code === "auth/user-not-found" || error.code === "auth/wrong-password"
+            ? "邮箱或密码不正确。如果还没有账号，请先点“注册新账号”。"
+            : "邮箱登录失败。请确认 Firebase 已启用“电子邮件/密码”登录方式。");
+        } finally {
+          setEmailBusy(false);
+        }
+      };
+
+      const registerWithEmail = async () => {
+        if (!services?.configured || emailBusy) return;
+        const credentials = getEmailCredentials();
+        if (!credentials) return;
+        setEmailBusy(true);
+        setMessage("");
+        try {
+          await services.createUserWithEmailAndPassword(services.auth, credentials.email, credentials.password);
+        } catch (error) {
+          console.error("Email registration failed", error);
+          setMessage(error.code === "auth/email-already-in-use"
+            ? "这个邮箱已经注册过了，请直接登录，或者使用“忘记密码”。"
+            : "注册失败。请确认 Firebase 已启用“电子邮件/密码”登录方式，并检查邮箱格式。");
+        } finally {
+          setEmailBusy(false);
+        }
+      };
+
+      const resetEmailPassword = async () => {
+        if (!services?.configured || emailBusy) return;
+        const email = emailForm.email.trim();
+        if (!email) {
+          setMessage("请输入邮箱地址后，再点击“忘记密码”。");
+          return;
+        }
+        setEmailBusy(true);
+        setMessage("");
+        try {
+          await services.sendPasswordResetEmail(services.auth, email);
+          setMessage("重置密码邮件已发送，请到邮箱里查看。");
+        } catch (error) {
+          console.error("Password reset failed", error);
+          setMessage("重置密码邮件发送失败，请检查邮箱地址，或确认 Firebase 邮箱登录方式已启用。");
+        } finally {
+          setEmailBusy(false);
         }
       };
 
@@ -4389,9 +4484,43 @@ Return strict JSON only. No markdown. No explanation. No code fence.`;
           {!user ? (
             <main className="welcome-wrap">
               <div className="welcome-card">
-                <h2>Your work, available on every device</h2>
-                <p>Sign in with the same Google account on your computer and phone. Your tasks will stay private to your account and sync automatically.</p>
-                <button className="btn btn-primary" onClick={signIn} disabled={!services.configured}>Sign in with Google</button>
+                <h2>登录每日工作追踪器</h2>
+                <p>可以使用普通邮箱注册 / 登录，也可以继续使用 Google 登录。任务会同步到你自己的账号下。</p>
+                <form className="email-auth-form" onSubmit={signInWithEmail}>
+                  <div className="field">
+                    <label htmlFor="loginEmail">邮箱</label>
+                    <input
+                      id="loginEmail"
+                      name="email"
+                      type="email"
+                      value={emailForm.email}
+                      onChange={updateEmailForm}
+                      placeholder="例如：name@qq.com"
+                      autoComplete="email"
+                      disabled={!services.configured || emailBusy}
+                    />
+                  </div>
+                  <div className="field">
+                    <label htmlFor="loginPassword">密码</label>
+                    <input
+                      id="loginPassword"
+                      name="password"
+                      type="password"
+                      value={emailForm.password}
+                      onChange={updateEmailForm}
+                      placeholder="至少 6 位"
+                      autoComplete="current-password"
+                      disabled={!services.configured || emailBusy}
+                    />
+                  </div>
+                  <div className="email-auth-actions">
+                    <button className="btn btn-primary" type="submit" disabled={!services.configured || emailBusy}>{emailBusy ? "处理中…" : "邮箱登录"}</button>
+                    <button className="btn btn-secondary" type="button" onClick={registerWithEmail} disabled={!services.configured || emailBusy}>注册新账号</button>
+                    <button className="btn btn-secondary" type="button" onClick={resetEmailPassword} disabled={!services.configured || emailBusy}>忘记密码</button>
+                  </div>
+                </form>
+                <div className="auth-divider">或</div>
+                <button className="btn btn-secondary" onClick={signIn} disabled={!services.configured || emailBusy}>使用 Google 登录</button>
                 {!services.configured && <div className="setup-note">Firebase is not configured yet. Replace the placeholder values in <strong>firebaseConfig</strong>, then publish the page again.</div>}
                 {message && <div className="error-note">{message}</div>}
               </div>
