@@ -3827,6 +3827,32 @@ Return strict JSON only. No markdown. No explanation. No code fence.`;
       setTimeout(() => URL.revokeObjectURL(url), 30000);
     }
 
+    function backupDateValue(value) {
+      const date = toDate(value);
+      return date ? date.toISOString() : (value || null);
+    }
+
+    function taskForBackup(task) {
+      const normalized = normalizeTask(task);
+      return {
+        ...normalized,
+        createdAt: backupDateValue(normalized.createdAt),
+        updatedAt: backupDateValue(normalized.updatedAt)
+      };
+    }
+
+    function backupFileName() {
+      const now = new Date();
+      const stamp = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+      return `daily-work-tracker-backup-${stamp}.json`;
+    }
+
+    function extractBackupTasks(data) {
+      if (Array.isArray(data)) return data;
+      if (Array.isArray(data?.tasks)) return data.tasks;
+      throw new Error("Backup file does not contain a tasks array.");
+    }
+
     function exportFileName(rangeMode) {
       const now = new Date();
       if (rangeMode === "week") {
@@ -3839,7 +3865,7 @@ Return strict JSON only. No markdown. No explanation. No code fence.`;
       return `工作追踪-自定义-${dateKey(now)}`;
     }
 
-    function StatsExportView({ tasks, onOpen, priorityOptions }) {
+    function StatsExportView({ tasks, onOpen, priorityOptions, onExportFullBackup, onChooseBackupFile, backupImporting }) {
       const [rangeMode, setRangeMode] = useState("week");
       const defaultRange = currentRange("week");
       const [customFrom, setCustomFrom] = useState(defaultRange.from);
@@ -4039,6 +4065,20 @@ Return strict JSON only. No markdown. No explanation. No code fence.`;
           <section className="stats-section">
             <div className="export-header">
               <div>
+                <h2>完整备份 / 迁移</h2>
+                <p>JSON备份用于灾备和以后迁移数据库；它会保存完整任务结构，不保存AI密钥，也不上传本机文件内容。</p>
+              </div>
+              <div className="quick-actions">
+                <button className="btn btn-primary" onClick={onExportFullBackup}>导出完整备份JSON</button>
+                <button className="btn btn-secondary" onClick={onChooseBackupFile} disabled={backupImporting}>{backupImporting ? "导入中…" : "导入完整备份JSON"}</button>
+              </div>
+            </div>
+            <p className="results-summary">建议定期下载备份。导入时会新增或更新备份里的任务，不会删除当前账号中其它任务。</p>
+          </section>
+
+          <section className="stats-section">
+            <div className="export-header">
+              <div>
                 <h2>导出字段</h2>
                 <p>只导出当前筛选后的任务和已勾选字段。</p>
               </div>
@@ -4108,7 +4148,9 @@ Return strict JSON only. No markdown. No explanation. No code fence.`;
       const [quickEntryStart, setQuickEntryStart] = useState(false);
       const [installPrompt, setInstallPrompt] = useState(null);
       const [installDismissed, setInstallDismissed] = useState(() => localStorage.getItem("dailyWorkTrackerInstallDismissed") === "yes");
+      const [backupImporting, setBackupImporting] = useState(false);
       const draggedId = useRef(null);
+      const backupInputRef = useRef(null);
 
       useEffect(() => {
         if (window.firebaseServices) {
@@ -4413,6 +4455,63 @@ Return strict JSON only. No markdown. No explanation. No code fence.`;
         }
       };
 
+      const exportFullBackup = () => {
+        if (!user) return;
+        const payload = {
+          app: "Daily Work Tracker",
+          backupVersion: 1,
+          exportedAt: new Date().toISOString(),
+          userEmail: user.email || "",
+          taskCount: tasks.length,
+          tasks: tasks.map(taskForBackup)
+        };
+        downloadTextFile(JSON.stringify(payload, null, 2), backupFileName(), "application/json;charset=utf-8");
+        setMessage(`完整备份已下载：${payload.taskCount} 个任务。请妥善保存这个 JSON 文件。`);
+      };
+
+      const chooseBackupFile = () => {
+        backupInputRef.current?.click();
+      };
+
+      const importFullBackup = async event => {
+        const file = event.target.files?.[0];
+        event.target.value = "";
+        if (!file || !user || !services?.configured || backupImporting) return;
+        setBackupImporting(true);
+        setSyncStatus("Syncing");
+        setMessage("");
+        try {
+          const text = await file.text();
+          const parsed = JSON.parse(text);
+          const importedTasks = extractBackupTasks(parsed).map(item => normalizeTask(item)).filter(item => item.title || item.id);
+          if (!importedTasks.length) throw new Error("No tasks found in backup.");
+          const proceed = window.confirm(`准备导入 ${importedTasks.length} 个任务。相同ID的任务会更新；当前账号里其它任务不会被删除。确定继续吗？`);
+          if (!proceed) {
+            setSyncStatus("Synced");
+            return;
+          }
+          for (let start = 0; start < importedTasks.length; start += 400) {
+            const batch = services.writeBatch(services.db);
+            importedTasks.slice(start, start + 400).forEach((task, index) => {
+              const prepared = { ...normalizeTask(task), order: task.order || start + index + 1 };
+              batch.set(
+                services.doc(tasksCollection(), prepared.id),
+                taskForFirestore(prepared, services.serverTimestamp(), true),
+                { merge: true }
+              );
+            });
+            await batch.commit();
+          }
+          setMessage(`完整备份导入完成：${importedTasks.length} 个任务已写入当前账号。`);
+        } catch (error) {
+          console.error("Full backup import failed", error);
+          setSyncStatus("Sync failed");
+          setMessage("完整备份导入失败。请确认选择的是本系统导出的 JSON 备份文件。");
+        } finally {
+          setBackupImporting(false);
+        }
+      };
+
       const dismissInstallPrompt = () => {
         setInstallDismissed(true);
         localStorage.setItem("dailyWorkTrackerInstallDismissed", "yes");
@@ -4446,6 +4545,13 @@ Return strict JSON only. No markdown. No explanation. No code fence.`;
 
       return (
         <>
+          <input
+            ref={backupInputRef}
+            type="file"
+            accept="application/json,.json"
+            onChange={importFullBackup}
+            style={{ display: "none" }}
+          />
           <header>
             <div className="brand">
               <h1>Daily Work Tracker</h1>
@@ -4549,7 +4655,7 @@ Return strict JSON only. No markdown. No explanation. No code fence.`;
                         <Column key={column.id} column={column} tasks={tasks.filter(task => task.status === column.id)} onAdd={openNew} onOpen={openExisting} onDelete={deleteTask} onDragStart={startDrag} onDragEnd={endDrag} onDragOver={(event, status) => { event.preventDefault(); setDragOver(status); }} onDrop={drop} isOver={dragOver === column.id} />
                       ))}
                     </main>
-                  ) : view === "table" ? <TableView tasks={tasks} onOpen={openExisting} /> : <StatsExportView tasks={tasks} onOpen={openExisting} priorityOptions={availablePriorityOptions} />}
+                  ) : view === "table" ? <TableView tasks={tasks} onOpen={openExisting} /> : <StatsExportView tasks={tasks} onOpen={openExisting} priorityOptions={availablePriorityOptions} onExportFullBackup={exportFullBackup} onChooseBackupFile={chooseBackupFile} backupImporting={backupImporting} />}
                 </>
               )}
             </>
