@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-CN">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Daily Work Tracker</title>
+  <title>每日工作追踪器</title>
   <link rel="manifest" href="manifest.webmanifest" />
   <meta name="theme-color" content="#4f46e5" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -1382,6 +1382,22 @@
       return map[text] || "";
     }
 
+    function inferProjectCategory(text, title = "") {
+      const source = `${text || ""} ${title || ""}`;
+      if (!source.trim()) return "";
+      const rules = [
+        [/(法规|合规|认证|认证机构|准入|标准|法规编号|检测|资质|类目对应.*(?:俄文|俄罗斯)|俄罗斯.*类目|seefar|ozon)/i, "产品合规 / 认证法规"],
+        [/(市场调研|市场研究|市场规模|市场大盘|消费者|竞品|价格段|价格带|市场规划|产品机会)/i, "市场调研 / 市场分析"],
+        [/(包装|包材|包装文案|标签|吊牌|贴纸|内盒|外箱|彩盒)/i, "包装标签 / 文案物料"],
+        [/(说明书|手册|SOP|操作指引|安装指引|使用指南|俄文|翻译|本地化)/i, "说明书 / 本地化资料"],
+        [/(PPT|汇报|报告|方案|演示|presentation)/i, "汇报材料 / 方案输出"],
+        [/(客户反馈|老板反馈|反馈调整|修改意见|评审意见)/i, "反馈调整 / 问题跟进"],
+        [/(物流|发货|运输|清关|报关|仓库|入库|出库)/i, "物流交付 / 履约跟进"],
+        [/(供应商|打样|报价|采购|物料|样品)/i, "供应商 / 采购协同"]
+      ];
+      return rules.find(([pattern]) => pattern.test(source))?.[1] || "";
+    }
+
     function normalizeParsedResult(raw) {
       const result = emptyParsedResult();
       PARSED_FIELDS.forEach(([key]) => {
@@ -1631,7 +1647,8 @@
         /(?:项目\s*(?:是|为|[:：])|类别\s*(?:是|为|[:：])|属于)\s*(.+?)(?=[，,。；;\n]|优先级|目前|当前|状态|进行中|待办|等待反馈|等反馈|待反馈|下一步|接下来|截止|最后期限|今天|明天|后天|反馈|结果|结论|$)/i
       );
       if (match?.[1]?.trim()) return match[1].trim().replace(/[，,。；;]+$/, "");
-      return inferRuleProject(extractRuleTitle(text) || text);
+      const title = extractRuleTitle(text) || text;
+      return inferProjectCategory(text, title) || inferRuleProject(title);
     }
 
     function cleanRuleTaskText(text) {
@@ -1656,6 +1673,8 @@
         .replace(/^(?:做|跟进|确认|整理|修改|检查|核对|输出|提交|准备|处理|对接|反馈|翻译|优化)/, "")
         .replace(/(?:修改|确认|作业|任务|清单|版本|问题清单)$/, "")
         .trim();
+      const inferred = inferProjectCategory(title, value);
+      if (inferred) return inferred;
       if (/工作交接SOP/i.test(title)) return "工作交接SOP";
       if (/包装文案/.test(title)) return "包装文案";
       if (/市场规划/.test(title)) return value || "市场规划";
@@ -2223,7 +2242,7 @@
           <form className="modal settings-modal" onSubmit={save}>
             <div className="modal-header">
               <div><h2>AI设置</h2><p>配置智能入口使用的解析服务。密钥只保存在当前浏览器。</p></div>
-              <button type="button" className="close-button" aria-label="Close" onClick={onClose}>×</button>
+              <button type="button" className="close-button" aria-label="关闭" onClick={onClose}>×</button>
             </div>
             <div className="form-body">
               <p className="settings-warning">不要使用共享或公开 API Key。Key 只存储在当前浏览器 localStorage，不会保存到 Firestore，也不会上传到服务器。</p>
@@ -2501,18 +2520,23 @@
         }));
         setSmartUpdateText("");
         setSmartUpdatePreview(null);
-        setSmartUpdateMessage("补充内容已加入表单。请点击 Save task 保存同步。");
+        setSmartUpdateMessage("补充内容已加入表单。请点击“保存任务”保存同步。");
       };
 
       const fillParsedResult = (result, mode = "规则解析模式", message = "", applyNow = true) => {
+        const enrichedResult = {
+          ...result,
+          project: result.project || inferProjectCategory(quickText, result.title) || extractRuleProject(quickText)
+        };
         setPreviousForm(form);
-        setParsedResult(result);
+        setParsedResult(enrichedResult);
         setParseMode(mode);
         if (!applyNow) {
           setParseMessage(message || "已生成解析预览。确认后点击“应用解析结果”。");
           return;
         }
         const next = { ...form };
+        result = enrichedResult;
         const mapping = {
           source: "source", project: "project",
           receivedDate: "receivedDate", startDate: "startDate", dueDate: "deadline", priority: "priority"
@@ -2593,12 +2617,12 @@
           setOpenSections(current => ({ ...current, review: true }));
         }
         setForm(next);
-        setParseMessage(message || "Parsed values have been filled. You can edit them before saving.");
+        setParseMessage(message || "解析内容已填入表单，你可以继续修改后再保存。");
       };
 
       const applyParsedResult = () => {
         if (!parsedResult) return;
-        fillParsedResult(parsedResult, parseMode || "规则解析模式", "解析结果已应用到表单。请检查后点击 Save task 保存同步。", true);
+        fillParsedResult(parsedResult, parseMode || "规则解析模式", "解析结果已应用到表单。请检查后点击“保存任务”保存同步。", true);
       };
 
       const undoParsedFill = () => {
@@ -2606,7 +2630,7 @@
         setForm(previousForm);
         setPreviousForm(null);
         setParseMode("");
-        setParseMessage("Parsed fill was undone.");
+        setParseMessage("已撤销本次解析填充。");
       };
 
       const prepareAttachmentLinks = () => {
@@ -2687,13 +2711,13 @@
         setPendingAttachments([]);
         setSelectedLocalAttachments([]);
         setAttachmentDialog(null);
-        setAttachmentMessage("附件记录已加入表单。请点击 Save task 保存同步。");
+        setAttachmentMessage("附件记录已加入表单。请点击“保存任务”保存同步。");
       };
 
       const deleteAttachment = async attachment => {
         if (!window.confirm("只会删除这个任务里的附件记录，不会删除云端或本地原文件。确定删除吗？")) return;
         setForm(current => ({ ...current, attachments: (current.attachments || []).filter(item => item.id !== attachment.id) }));
-        setAttachmentMessage("附件记录已从表单删除。请点击 Save task 保存同步，原文件不会被删除。");
+        setAttachmentMessage("附件记录已从表单删除。请点击“保存任务”保存同步，原文件不会被删除。");
       };
 
       const addLocalAttachments = async (section = "task", index = -1) => {
@@ -2746,7 +2770,7 @@
 
       const parseWithRules = () => {
         if (!quickText.trim()) {
-          setParseMessage("Enter or dictate a task description first.");
+          setParseMessage("请先输入或语音录入任务描述。");
           return;
         }
         fillParsedResult(
@@ -2759,7 +2783,7 @@
 
       const parseWithAI = async () => {
         if (!quickText.trim()) {
-          setParseMessage("Enter or dictate a task description first.");
+          setParseMessage("请先输入或语音录入任务描述。");
           return;
         }
         const provider = aiSettings.aiProvider || "rule";
@@ -2836,6 +2860,8 @@ First classify inputType as one of: 新建任务, 进展更新, 反馈调整, �
 
 General rules:
 - Do not put a whole long sentence into title. Title must be a short work item name.
+- Always fill project when possible. If the user explicitly says 项目是/类别是/属于, use that value. If not explicitly stated, infer a short project/category from the work content instead of leaving it blank. Use practical categories that help later filtering and statistics, such as 产品合规 / 认证法规, 市场调研 / 市场分析, 包装标签 / 文案物料, 说明书 / 本地化资料, 汇报材料 / 方案输出, 反馈调整 / 问题跟进, 物流交付 / 履约跟进, 供应商 / 采购协同.
+- Project is a category or workstream, not a long background sentence. Keep project within about 2-10 Chinese words or one short "A / B" category.
 - Checklist rows must be concrete actionable steps.
 - Feedback/adjustment content goes into feedback and related checklist rows.
 - Delivery result goes into finalResult. Review/lessons go into reviewSummary.
@@ -2843,7 +2869,7 @@ General rules:
 - Parse dates as YYYY-MM-DD. Today is ${dateKey(new Date())}. For 明天下午 use dueDate tomorrow and reminder or row reminderAt about 15:00 only when a time/reminder field is relevant.
 - Status must be 收集箱, 进行中, or 已完成. Use 收集箱 only for newly captured/not-started work. Use 进行中 for progress/feedback/adjustment/remaining work. Use 已完成 for 已完成/已提交/已交付/已发给老板/已发出.
 - Source rules: 老板让我/老板反馈 => 老板; 领导让我/领导反馈 => 领导; 客户让我/客户反馈 => 客户. inputType is never source.
-- If information is not explicitly stated, use an empty string. Never invent missing facts.
+- If information is not explicitly stated, use an empty string, except project/category may be reasonably inferred from the work content. Never invent missing dates, people, results, or facts.
 
 Examples:
 1) Input: 老板让我本周五前完成俄罗斯水槽市场规划PPT，内容包括市场大盘、消费者习惯、竞品价格和产品机会，优先级2。
@@ -2856,6 +2882,8 @@ Output: inputType 进展更新; status 进行中; actualHours 2.5; completed che
 Output: inputType 完成交付; status 已完成; actualHours 6.5; finalResult 市场规划PPT已发给老板。; reviewSummary 后续市场分析要先确定价格带和重点品牌，避免中途返工。
 5) Input: 老板反馈包装文案里面“微米级泡沫净洗”要改成“一键泡沫净洗”，其余版式不变，今天下午改完。
 Output: inputType 反馈调整; title 修改包装文案; source 老板; status 进行中; executionItems: 将“微米级泡沫净洗”改为“一键泡沫净洗”, 保持其余版式不变; feedback 老板反馈包装文案需要调整指定表述。
+6) Input: 我接到新任务就是要研究新类目的法规要求，在seefar-ozon查找该品类的对应产品类型、材质等、类目对应俄罗斯名字、用途；问认证机构和GPT后续要做这些类目符合哪些法规、法规编号。
+Output: inputType 新建任务; title 新类目法规要求研究; project 产品合规 / 认证法规; status 收集箱; executionItems: 在Seerfar-Ozon查找目标品类对应产品类型和材质, 梳理类目对应俄罗斯名称和用途, 咨询认证机构确认适用法规, 向GPT辅助查询法规要求和法规编号.
 
 Return strict JSON only. No markdown. No explanation. No code fence.`;
         try {
@@ -2903,7 +2931,11 @@ Return strict JSON only. No markdown. No explanation. No code fence.`;
           }
           content = extractJsonObjectText(content);
           if (!content) throw new Error("AI returned empty content");
-          fillParsedResult(normalizeParsedResult(JSON.parse(content)), "AI解析模式", "AI解析完成。确认后点击“应用解析结果”。", false);
+          const normalizedAIResult = normalizeParsedResult(JSON.parse(content));
+          if (!normalizedAIResult.project) {
+            normalizedAIResult.project = inferProjectCategory(quickText, normalizedAIResult.title);
+          }
+          fillParsedResult(normalizedAIResult, "AI解析模式", "AI解析完成。确认后点击“应用解析结果”。", false);
         } catch (error) {
           console.error("AI parsing failed", error);
           setParseMessage(`AI解析失败：${error.message}。不会自动保存任何数据。你可以检查 API Key / model，或改用“规则解析”。`);
@@ -2924,7 +2956,7 @@ Return strict JSON only. No markdown. No explanation. No code fence.`;
       const startDictation = () => {
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
         if (!SpeechRecognition) {
-          setParseMessage("Speech dictation is not supported in this browser. You can type or paste the paragraph instead.");
+          setParseMessage("当前浏览器不支持语音输入，你可以手动输入或粘贴文字。");
           return;
         }
         const recognition = new SpeechRecognition();
@@ -2933,7 +2965,7 @@ Return strict JSON only. No markdown. No explanation. No code fence.`;
         recognition.continuous = false;
         recognition.onstart = () => setListening(true);
         recognition.onend = () => setListening(false);
-        recognition.onerror = event => { setListening(false); setParseMessage(`Dictation failed: ${event.error}`); };
+        recognition.onerror = event => { setListening(false); setParseMessage(`语音输入失败：${event.error}`); };
         recognition.onresult = event => {
           const transcript = Array.from(event.results).map(result => result[0].transcript).join(" ");
           setQuickText(current => `${current}${current ? " " : ""}${transcript}`);
@@ -3133,12 +3165,12 @@ Return strict JSON only. No markdown. No explanation. No code fence.`;
           <form className={`modal${expanded ? " modal-expanded" : ""}`} onSubmit={submit}>
             <div className="modal-header">
               <div>
-                <h2>{isNew ? "Add a work task" : "Task details"}</h2>
-                <p>Record only what is useful now. You can return and add more detail later.</p>
+                <h2>{isNew ? "添加工作任务" : "任务详情"}</h2>
+                <p>先记录当前有用的信息，后续可以继续补充细节。</p>
               </div>
               <div className="modal-header-actions">
                 <button type="button" className="btn btn-secondary" onClick={() => setExpanded(current => !current)}>{expanded ? "退出全屏" : "全屏编辑"}</button>
-                <button type="button" className="close-button" aria-label="Close" onClick={onClose}>×</button>
+                <button type="button" className="close-button" aria-label="关闭" onClick={onClose}>×</button>
               </div>
             </div>
             <div className="form-body">
@@ -3146,19 +3178,19 @@ Return strict JSON only. No markdown. No explanation. No code fence.`;
                 {isNew && (
                   <section className="quick-entry">
                     <h3>智能入口</h3>
-                    <p className="quick-entry-intro">新建任务：输入一句话，自动填写任务信息。解析内容不会保存，直到你点击 Save task。</p>
+                    <p className="quick-entry-intro">新建任务：输入一句话，自动填写任务信息。解析内容不会保存，直到你点击“保存任务”。</p>
                     <textarea ref={quickEntryRef} value={quickText} onChange={event => setQuickText(event.target.value)} placeholder="例如：我今天收到了我老板给我的市场规划作业 / 苗让我做俄罗斯市场规划，周五前给他 / 客户让我确认包装文案" />
                     <div className="quick-actions">
-                      <button type="button" className="btn btn-primary" onClick={parseWithAI} disabled={parsing}>{parsing ? "AI Parsing…" : "AI Parse"}</button>
-                      <button type="button" className="btn btn-secondary" onClick={parseWithRules}>Rule Parse</button>
+                      <button type="button" className="btn btn-primary" onClick={parseWithAI} disabled={parsing}>{parsing ? "AI解析中…" : "AI解析"}</button>
+                      <button type="button" className="btn btn-secondary" onClick={parseWithRules}>规则解析</button>
                       <button type="button" className={`btn btn-secondary${listening ? " mic-active" : ""}`} onClick={startDictation}>{listening ? "正在听…" : "语音输入"}</button>
-                      <button type="button" className="btn btn-secondary" onClick={clearQuickEntry}>Clear</button>
-                      <button type="button" className="btn btn-secondary" onClick={onOpenAISettings}>AI Settings</button>
+                      <button type="button" className="btn btn-secondary" onClick={clearQuickEntry}>清空</button>
+                      <button type="button" className="btn btn-secondary" onClick={onOpenAISettings}>AI设置</button>
                     </div>
                     {parseMessage && <p className="parse-message">{parseMessage}</p>}
                     {parsedResult && (
                       <div className="parsed-preview">
-                        <h4>Parsed result preview · {parseMode || "解析模式未确定"}</h4>
+                        <h4>解析结果预览 · {parseMode || "解析模式未确定"}</h4>
                         <div className="preview-grid">
                           {PARSED_FIELDS.filter(([key]) => parsedResult[key]).map(([key, label]) => (
                             <div className="preview-item" key={key}><strong>{label}:</strong> {key === "status" ? statusTitle(parsedResult[key]) : key === "reminder" ? displayReminder(parsedResult[key]) : parsedResult[key]}</div>
@@ -3167,11 +3199,11 @@ Return strict JSON only. No markdown. No explanation. No code fence.`;
                             <div className="preview-item" key={`exec-${index}`}><strong>执行清单:</strong> {item.text}｜{item.status}{item.dueText ? `｜目标：${item.dueText}` : ""}{item.reminderAt ? `｜提醒：${displayReminder(item.reminderAt)}` : ""}{item.actualHours ? `｜耗时：${formatHours(item.actualHours)}` : ""}{item.feedbackNote ? `｜${item.feedbackNote}` : ""}</div>
                           ))}
                           {parsedResult.reviewSummary && <div className="preview-item"><strong>复盘小结:</strong> {parsedResult.reviewSummary}</div>}
-                          {!PARSED_FIELDS.some(([key]) => parsedResult[key]) && !parsedResult.executionItems?.length && !parsedResult.reviewSummary && <div className="preview-item">No task fields were detected.</div>}
+                          {!PARSED_FIELDS.some(([key]) => parsedResult[key]) && !parsedResult.executionItems?.length && !parsedResult.reviewSummary && <div className="preview-item">暂未识别到任务字段。</div>}
                         </div>
                         <div className="quick-actions">
                           <button type="button" className="btn btn-primary" onClick={applyParsedResult}>应用解析结果</button>
-                          {previousForm && <button type="button" className="btn btn-secondary" onClick={undoParsedFill}>Undo parsed fill</button>}
+                          {previousForm && <button type="button" className="btn btn-secondary" onClick={undoParsedFill}>撤销解析填充</button>}
                         </div>
                       </div>
                     )}
@@ -3366,14 +3398,14 @@ Return strict JSON only. No markdown. No explanation. No code fence.`;
                                 <td data-label="耗时"><input type="number" min="0" step="0.25" value={item.actualHours || ""} onChange={event => updateExecutionItem(index, "actualHours", event.target.value)} placeholder="未填写" /></td>
                                 <td data-label="反馈/调整记录"><textarea value={item.feedbackNote} onChange={event => updateExecutionItem(index, "feedbackNote", event.target.value)} placeholder="记录反馈、调整原因或注意点" /></td>
                                 <td data-label="相关附件">{renderRowAttachments(item.attachments, "execution", index)}</td>
-                                <td data-label="删除"><button type="button" className="attachment-action danger" onClick={() => deleteExecutionItem(index)}>Delete</button></td>
+                                <td data-label="删除"><button type="button" className="attachment-action danger" onClick={() => deleteExecutionItem(index)}>删除</button></td>
                               </tr>
                             ))}
                             {!executionChecklistItems.length && <tr><td colSpan="8">还没有执行清单。可以点击添加，或用智能入口拆解任务。</td></tr>}
                           </tbody>
                         </table>
                       </div>
-                      <div className="quick-actions"><button type="button" className="btn btn-secondary" onClick={addExecutionItem}>Add checklist row</button></div>
+                      <div className="quick-actions"><button type="button" className="btn btn-secondary" onClick={addExecutionItem}>添加执行项</button></div>
                     </div>
                   )}
                 </section>
@@ -3394,14 +3426,14 @@ Return strict JSON only. No markdown. No explanation. No code fence.`;
                                 <td><input value={item.createdAt} onChange={event => updateFinalResultItem(index, "createdAt", event.target.value)} placeholder="时间" /></td>
                                 <td><textarea value={item.text} onChange={event => updateFinalResultItem(index, "text", event.target.value)} placeholder="填写结果内容" /></td>
                                 <td>{renderRowAttachments(item.attachments, "final", index)}</td>
-                                <td><button type="button" className="attachment-action danger" onClick={() => deleteFinalResultItem(index)}>Delete</button></td>
+                                <td><button type="button" className="attachment-action danger" onClick={() => deleteFinalResultItem(index)}>删除</button></td>
                               </tr>
                             ))}
                             {!finalResultItems.length && <tr><td colSpan="5">还没有交付结果。</td></tr>}
                           </tbody>
                         </table>
                       </div>
-                      <div className="quick-actions"><button type="button" className="btn btn-secondary" onClick={addFinalResultItem}>Add delivery result</button></div>
+                      <div className="quick-actions"><button type="button" className="btn btn-secondary" onClick={addFinalResultItem}>添加交付结果</button></div>
                     </div>
                   )}
                 </section>
@@ -3422,14 +3454,14 @@ Return strict JSON only. No markdown. No explanation. No code fence.`;
                                 <td><input value={item.createdAt} onChange={event => updateReviewItem(index, "createdAt", event.target.value)} placeholder="时间" /></td>
                                 <td><textarea value={item.text} onChange={event => updateReviewItem(index, "text", event.target.value)} placeholder="记录经验、复盘、下次改进方式" /></td>
                                 <td>{renderRowAttachments(item.attachments, "review", index)}</td>
-                                <td><button type="button" className="attachment-action danger" onClick={() => deleteReviewItem(index)}>Delete</button></td>
+                                <td><button type="button" className="attachment-action danger" onClick={() => deleteReviewItem(index)}>删除</button></td>
                               </tr>
                             ))}
                             {!reviewSummaryItems.length && <tr><td colSpan="5">还没有复盘小结。</td></tr>}
                           </tbody>
                         </table>
                       </div>
-                      <div className="quick-actions"><button type="button" className="btn btn-secondary" onClick={addReviewItem}>Add review summary</button></div>
+                      <div className="quick-actions"><button type="button" className="btn btn-secondary" onClick={addReviewItem}>添加复盘小结</button></div>
                     </div>
                   )}
                 </section>
@@ -3481,10 +3513,10 @@ Return strict JSON only. No markdown. No explanation. No code fence.`;
               </div>
             </div>
             <div className="modal-actions">
-              <div>{!isNew && <button type="button" className="btn btn-danger" onClick={() => onDelete(form.id)}>Delete task</button>}</div>
+              <div>{!isNew && <button type="button" className="btn btn-danger" onClick={() => onDelete(form.id)}>删除任务</button>}</div>
               <div className="action-group">
-                <button type="button" className="btn btn-secondary" onClick={onClose}>Cancel</button>
-                <button type="submit" className="btn btn-primary">Save task</button>
+                <button type="button" className="btn btn-secondary" onClick={onClose}>取消</button>
+                <button type="submit" className="btn btn-primary">保存任务</button>
               </div>
             </div>
           </form>
@@ -3495,15 +3527,15 @@ Return strict JSON only. No markdown. No explanation. No code fence.`;
     function TaskCard({ task, onOpen, onDelete, onDragStart, onDragEnd }) {
       return (
         <article className="task-card" draggable onClick={() => onOpen(task)} onDragStart={event => onDragStart(event, task.id)} onDragEnd={onDragEnd}>
-          <button className="card-delete" aria-label={`Delete ${task.title}`} onClick={event => { event.stopPropagation(); onDelete(task.id); }}>×</button>
+          <button className="card-delete" aria-label={`删除 ${task.title}`} onClick={event => { event.stopPropagation(); onDelete(task.id); }}>×</button>
           <h3 className="card-title">{task.title}</h3>
           <div className="card-meta">
             <span className={`pill ${priorityClass(task.priority)}`}>{normalizePriority(task.priority) || "优先级3"}</span>
             {task.project && <span className="pill">{task.project}</span>}
-            {attachmentCount(task) > 0 && <span className="pill">{attachmentCount(task)} file{attachmentCount(task) === 1 ? "" : "s"}</span>}
+            {attachmentCount(task) > 0 && <span className="pill">{attachmentCount(task)} 个附件</span>}
           </div>
-          {task.source && <p className="card-line"><strong>From:</strong> {task.source}</p>}
-          {task.deadline && <p className="card-line"><strong>Due:</strong> {task.deadline}</p>}
+          {task.source && <p className="card-line"><strong>来源：</strong> {task.source}</p>}
+          {task.deadline && <p className="card-line"><strong>期限：</strong> {task.deadline}</p>}
           {normalizeExecutionItems(task.executionItems, task).length > 0 && <p className="card-line"><strong>执行清单:</strong> {normalizeExecutionItems(task.executionItems, task).length}</p>}
         </article>
       );
@@ -3520,10 +3552,10 @@ Return strict JSON only. No markdown. No explanation. No code fence.`;
             <span className="column-count">{tasks.length}</span>
           </div>
           <div className="card-list">
-            {!tasks.length && <div className="empty">No tasks here</div>}
+            {!tasks.length && <div className="empty">暂无任务</div>}
             {tasks.map(task => <TaskCard key={task.id} task={task} onOpen={onOpen} onDelete={onDelete} onDragStart={onDragStart} onDragEnd={onDragEnd} />)}
           </div>
-          <button className="add-task" onClick={() => onAdd(column.id)}>+ Add task</button>
+          <button className="add-task" onClick={() => onAdd(column.id)}>+ 添加任务</button>
         </section>
       );
     }
@@ -3594,21 +3626,21 @@ Return strict JSON only. No markdown. No explanation. No code fence.`;
         <main className="table-view">
           <div className="filters">
             <div className="filter-field">
-              <label htmlFor="tableSearch">Search keyword</label>
-              <input id="tableSearch" value={search} onChange={event => setSearch(event.target.value)} placeholder="Search titles, notes, feedback, results…" />
+              <label htmlFor="tableSearch">搜索关键词</label>
+              <input id="tableSearch" value={search} onChange={event => setSearch(event.target.value)} placeholder="搜索标题、记录、反馈、结果…" />
             </div>
             <div className="filter-field">
-              <label htmlFor="statusFilter">Status</label>
+              <label htmlFor="statusFilter">状态</label>
               <select id="statusFilter" value={status} onChange={event => setStatus(event.target.value)}>
-                <option value="">All statuses</option>
+                <option value="">全部状态</option>
                 {COLUMNS.map(column => <option key={column.id} value={column.id}>{column.title}</option>)}
                 <option value="archived">归档</option>
               </select>
             </div>
             <div className="filter-field">
-              <label htmlFor="projectFilter">Project / Category</label>
+              <label htmlFor="projectFilter">项目或类别</label>
               <select id="projectFilter" value={project} onChange={event => setProject(event.target.value)}>
-                <option value="">All projects</option>
+                <option value="">全部项目或类别</option>
                 {projects.map(item => <option key={item} value={item}>{item}</option>)}
               </select>
             </div>
@@ -3621,41 +3653,41 @@ Return strict JSON only. No markdown. No explanation. No code fence.`;
             </div>
             <div className="date-filters">
               <div className="filter-field">
-                <label htmlFor="dateFrom">Created from</label>
+                <label htmlFor="dateFrom">创建日期从</label>
                 <input id="dateFrom" type="date" value={dateFrom} onChange={event => setDateFrom(event.target.value)} />
               </div>
               <div className="filter-field">
-                <label htmlFor="dateTo">Created to</label>
+                <label htmlFor="dateTo">创建日期到</label>
                 <input id="dateTo" type="date" value={dateTo} onChange={event => setDateTo(event.target.value)} />
               </div>
             </div>
             <div className="filter-checks">
-              <label className="check-label"><input type="checkbox" checked={unfinishedOnly} onChange={event => setUnfinishedOnly(event.target.checked)} /> Show only unfinished tasks</label>
-              <label className="check-label"><input type="checkbox" checked={feedbackOnly} onChange={event => setFeedbackOnly(event.target.checked)} /> Show only tasks waiting for feedback</label>
-              <label className="check-label"><input type="radio" name="attachmentFilter" checked={attachmentFilter === "has"} onChange={() => setAttachmentFilter("has")} /> Has attachments</label>
-              <label className="check-label"><input type="radio" name="attachmentFilter" checked={attachmentFilter === "none"} onChange={() => setAttachmentFilter("none")} /> No attachments</label>
-              {attachmentFilter && <button type="button" className="btn btn-secondary" onClick={() => setAttachmentFilter("")}>Clear file filter</button>}
+              <label className="check-label"><input type="checkbox" checked={unfinishedOnly} onChange={event => setUnfinishedOnly(event.target.checked)} /> 只看未完成任务</label>
+              <label className="check-label"><input type="checkbox" checked={feedbackOnly} onChange={event => setFeedbackOnly(event.target.checked)} /> 只看等待反馈任务</label>
+              <label className="check-label"><input type="radio" name="attachmentFilter" checked={attachmentFilter === "has"} onChange={() => setAttachmentFilter("has")} /> 有附件</label>
+              <label className="check-label"><input type="radio" name="attachmentFilter" checked={attachmentFilter === "none"} onChange={() => setAttachmentFilter("none")} /> 无附件</label>
+              {attachmentFilter && <button type="button" className="btn btn-secondary" onClick={() => setAttachmentFilter("")}>清除附件筛选</button>}
             </div>
             <div className="sort-controls">
               <div className="filter-field">
-                <label htmlFor="sortBy">Sort by</label>
+                <label htmlFor="sortBy">排序方式</label>
                 <select id="sortBy" value={sortBy} onChange={event => setSortBy(event.target.value)}>
-                  <option value="createdAt">Created date</option>
-                  <option value="deadline">Due date</option>
-                  <option value="updatedAt">Last updated</option>
-                  <option value="status">Status</option>
+                  <option value="createdAt">创建日期</option>
+                  <option value="deadline">完成期限</option>
+                  <option value="updatedAt">最近更新</option>
+                  <option value="status">状态</option>
                   <option value="priority">优先级</option>
                 </select>
               </div>
-              <button className="btn btn-secondary sort-direction" onClick={() => setSortDirection(current => current === "asc" ? "desc" : "asc")}>{sortDirection === "asc" ? "Ascending" : "Descending"}</button>
+              <button className="btn btn-secondary sort-direction" onClick={() => setSortDirection(current => current === "asc" ? "desc" : "asc")}>{sortDirection === "asc" ? "升序" : "降序"}</button>
             </div>
           </div>
 
-          <p className="results-summary">Showing {filteredTasks.length} of {tasks.length} tasks</p>
+          <p className="results-summary">当前显示 {filteredTasks.length} / {tasks.length} 个任务</p>
 
           <div className="task-table-wrap">
             <table className="task-table">
-              <thead><tr><th>Title</th><th>Status</th><th>Project / Category</th><th>Task source</th><th>优先级</th><th>Files</th><th>执行清单</th><th>Created date</th><th>Due date</th><th>Last updated</th><th>交付结果 / Summary</th></tr></thead>
+              <thead><tr><th>任务标题</th><th>状态</th><th>项目或类别</th><th>任务来源</th><th>优先级</th><th>附件</th><th>执行清单</th><th>创建日期</th><th>完成期限</th><th>最近更新</th><th>交付结果 / 摘要</th></tr></thead>
               <tbody>
                 {filteredTasks.map(task => (
                   <tr key={task.id} tabIndex="0" onClick={() => onOpen(task)} onKeyDown={event => openFromKeyboard(event, task)}>
@@ -3684,13 +3716,13 @@ Return strict JSON only. No markdown. No explanation. No code fence.`;
                   <span className="pill">{statusTitle(task.status)}</span>
                   <span className={`pill ${priorityClass(task.priority)}`}>{normalizePriority(task.priority) || "优先级3"}</span>
                   {task.project && <span className="pill">{task.project}</span>}
-                  {attachmentCount(task) > 0 && <span className="pill">{attachmentCount(task)} file{attachmentCount(task) === 1 ? "" : "s"}</span>}
-                  {normalizeExecutionItems(task.executionItems, task).length > 0 && <span className="pill">{normalizeExecutionItems(task.executionItems, task).length} checklist</span>}
+                  {attachmentCount(task) > 0 && <span className="pill">{attachmentCount(task)} 个附件</span>}
+                  {normalizeExecutionItems(task.executionItems, task).length > 0 && <span className="pill">{normalizeExecutionItems(task.executionItems, task).length} 个执行项</span>}
                 </div>
-                {task.source && <p><strong>From:</strong> {task.source}</p>}
-                <p><strong>Created:</strong> {formatDate(createdDate(task))} · <strong>Due:</strong> {formatDate(task.deadline)}</p>
-                <p><strong>Updated:</strong> {formatDate(task.updatedAt, true)}</p>
-                {task.finalResult && <p><strong>Result:</strong> {task.finalResult}</p>}
+                {task.source && <p><strong>来源：</strong> {task.source}</p>}
+                <p><strong>创建：</strong> {formatDate(createdDate(task))} · <strong>期限：</strong> {formatDate(task.deadline)}</p>
+                <p><strong>更新：</strong> {formatDate(task.updatedAt, true)}</p>
+                {task.finalResult && <p><strong>结果：</strong> {task.finalResult}</p>}
               </article>
             ))}
           </div>
@@ -3850,7 +3882,7 @@ Return strict JSON only. No markdown. No explanation. No code fence.`;
     function extractBackupTasks(data) {
       if (Array.isArray(data)) return data;
       if (Array.isArray(data?.tasks)) return data.tasks;
-      throw new Error("Backup file does not contain a tasks array.");
+      throw new Error("备份文件里没有找到任务列表。");
     }
 
     function exportFileName(rangeMode) {
@@ -4199,7 +4231,7 @@ Return strict JSON only. No markdown. No explanation. No code fence.`;
             console.error("Authentication listener failed", error);
             setAuthReady(true);
             setSyncStatus("Sync failed");
-            setMessage("Could not check your sign-in. Please refresh and try again.");
+            setMessage("无法检查登录状态，请刷新页面后重试。");
           }
         );
       }, [services]);
@@ -4237,7 +4269,7 @@ Return strict JSON only. No markdown. No explanation. No code fence.`;
             console.error("Task sync failed", error);
             setRemoteReady(true);
             setSyncStatus("Sync failed");
-            setMessage("Tasks could not sync. Check your connection and Firebase setup.");
+            setMessage("任务同步失败，请检查网络和 Firebase 配置。");
           }
         );
         return unsubscribe;
@@ -4259,7 +4291,7 @@ Return strict JSON only. No markdown. No explanation. No code fence.`;
         } catch (error) {
           console.error("Could not save task", error);
           setSyncStatus("Sync failed");
-          setMessage("This task could not be saved. Check your connection and try again.");
+          setMessage("任务保存失败，请检查网络后重试。");
           return false;
         }
       };
@@ -4287,8 +4319,8 @@ Return strict JSON only. No markdown. No explanation. No code fence.`;
         } catch (error) {
           console.error("Google sign-in failed", error);
           setMessage(error.code === "auth/popup-blocked"
-            ? "The sign-in window was blocked. Allow pop-ups for this page and try again."
-            : "Google sign-in failed. Check the Firebase authorized domains and try again.");
+            ? "登录窗口被浏览器拦截了，请允许此页面弹窗后重试。"
+            : "Google 登录失败，请检查 Firebase 授权域名后重试。");
         }
       };
 
@@ -4379,7 +4411,7 @@ Return strict JSON only. No markdown. No explanation. No code fence.`;
         } catch (error) {
           console.error("Sign out failed", error);
           setSyncStatus("Sync failed");
-          setMessage("Could not sign out. Please try again.");
+          setMessage("退出登录失败，请重试。");
         }
       };
 
@@ -4394,7 +4426,7 @@ Return strict JSON only. No markdown. No explanation. No code fence.`;
         if (await writeTask(task, isNew)) setEditing(null);
       };
       const deleteTask = async id => {
-        if (!window.confirm("Delete this task? This cannot be undone.")) return;
+        if (!window.confirm("确定删除这个任务吗？此操作不能撤销。")) return;
         setSyncStatus("Syncing");
         setMessage("");
         try {
@@ -4403,7 +4435,7 @@ Return strict JSON only. No markdown. No explanation. No code fence.`;
         } catch (error) {
           console.error("Could not delete task", error);
           setSyncStatus("Sync failed");
-          setMessage("This task could not be deleted. Check your connection and try again.");
+          setMessage("任务删除失败，请检查网络后重试。");
         }
       };
       const startDrag = (event, id) => {
@@ -4451,7 +4483,7 @@ Return strict JSON only. No markdown. No explanation. No code fence.`;
         } catch (error) {
           console.error("Local task import failed", error);
           setSyncStatus("Sync failed");
-          setMessage("Local tasks could not be imported. Nothing was removed; please try again.");
+          setMessage("旧版本地任务导入失败。没有删除任何数据，请稍后重试。");
         }
       };
 
@@ -4484,7 +4516,7 @@ Return strict JSON only. No markdown. No explanation. No code fence.`;
           const text = await file.text();
           const parsed = JSON.parse(text);
           const importedTasks = extractBackupTasks(parsed).map(item => normalizeTask(item)).filter(item => item.title || item.id);
-          if (!importedTasks.length) throw new Error("No tasks found in backup.");
+          if (!importedTasks.length) throw new Error("备份文件里没有找到任务。");
           const proceed = window.confirm(`准备导入 ${importedTasks.length} 个任务。相同ID的任务会更新；当前账号里其它任务不会被删除。确定继续吗？`);
           if (!proceed) {
             setSyncStatus("Synced");
@@ -4535,12 +4567,18 @@ Return strict JSON only. No markdown. No explanation. No code fence.`;
       const availablePriorityOptions = uniquePriorityOptions(tasks.map(task => task.priority));
 
       const statusClass = syncStatus === "Synced" ? "synced" : syncStatus === "Syncing" ? "syncing" : syncStatus === "Sync failed" ? "failed" : "";
+      const syncStatusLabel = {
+        "Not signed in": "未登录",
+        "Syncing": "同步中",
+        "Synced": "已同步",
+        "Sync failed": "同步失败"
+      }[syncStatus] || syncStatus;
       const standalone = window.matchMedia?.("(display-mode: standalone)")?.matches || window.navigator.standalone === true;
       const isiOSSafari = /iphone|ipad|ipod/i.test(navigator.userAgent) && /safari/i.test(navigator.userAgent) && !/crios|fxios|edgios/i.test(navigator.userAgent);
       const showInstallBanner = !standalone && !installDismissed && (installPrompt || isiOSSafari);
 
       if (!services || !authReady) {
-        return <div className="loading-board">Starting Daily Work Tracker…</div>;
+        return <div className="loading-board">正在启动每日工作追踪器…</div>;
       }
 
       return (
@@ -4554,22 +4592,22 @@ Return strict JSON only. No markdown. No explanation. No code fence.`;
           />
           <header>
             <div className="brand">
-              <h1>Daily Work Tracker</h1>
-              <p>Keep the background, progress, feedback, and result of your work in one place.</p>
+              <h1>每日工作追踪器</h1>
+              <p>把任务背景、执行过程、反馈和交付结果集中记录在一个地方。</p>
             </div>
             <div className="header-actions">
-              {user && <div className="stats"><span><strong>{activeCount}</strong> active</span><span><strong>{doneCount}</strong> done</span></div>}
-              <span className={`sync-status ${statusClass}`}>{syncStatus}</span>
+              {user && <div className="stats"><span><strong>{activeCount}</strong> 进行中</span><span><strong>{doneCount}</strong> 已完成</span></div>}
+              <span className={`sync-status ${statusClass}`}>{syncStatusLabel}</span>
               {user ? (
                 <div className="account-area">
                   <span className="account-email" title={user.email}>{user.email}</span>
-                  <button className="btn btn-secondary" onClick={logOut}>Sign out</button>
-                  <button className="btn btn-secondary" onClick={() => setShowAISettings(true)}>AI Settings</button>
+                  <button className="btn btn-secondary" onClick={logOut}>退出登录</button>
+                  <button className="btn btn-secondary" onClick={() => setShowAISettings(true)}>AI设置</button>
                   <button className="btn btn-secondary" onClick={() => openNew("new", true)}>智能入口</button>
-                  <button className="btn btn-primary" onClick={() => openNew("new")}>+ New task</button>
+                  <button className="btn btn-primary" onClick={() => openNew("new")}>+ 新任务</button>
                 </div>
               ) : (
-                <button className="btn btn-primary" onClick={signIn} disabled={!services.configured}>Sign in with Google</button>
+                <button className="btn btn-primary" onClick={signIn} disabled={!services.configured}>使用 Google 登录</button>
               )}
             </div>
           </header>
@@ -4627,7 +4665,7 @@ Return strict JSON only. No markdown. No explanation. No code fence.`;
                 </form>
                 <div className="auth-divider">或</div>
                 <button className="btn btn-secondary" onClick={signIn} disabled={!services.configured || emailBusy}>使用 Google 登录</button>
-                {!services.configured && <div className="setup-note">Firebase is not configured yet. Replace the placeholder values in <strong>firebaseConfig</strong>, then publish the page again.</div>}
+                {!services.configured && <div className="setup-note">Firebase 还没有配置好。请先填写 <strong>firebaseConfig</strong> 后再发布页面。</div>}
                 {message && <div className="error-note">{message}</div>}
               </div>
             </main>
@@ -4635,15 +4673,15 @@ Return strict JSON only. No markdown. No explanation. No code fence.`;
             <>
               {localTasks.length > 0 && (
                 <div className="import-banner">
-                  <span>{localTasks.length} task{localTasks.length === 1 ? "" : "s"} from the old local-only app were found on this device.</span>
-                  <button className="btn btn-secondary" onClick={importLocalTasks}>Import into my account</button>
+                  <span>在这台设备上发现旧版本地任务：{localTasks.length} 个。</span>
+                  <button className="btn btn-secondary" onClick={importLocalTasks}>导入到我的账号</button>
                 </div>
               )}
               {message && <div className="import-banner error-note">{message}</div>}
-              {!remoteReady && !tasks.length ? <div className="loading-board">Syncing your tasks…</div> : (
+              {!remoteReady && !tasks.length ? <div className="loading-board">正在同步你的任务…</div> : (
                 <>
                   <div className="view-toolbar">
-                    <div className="view-switcher" aria-label="Choose task view">
+                    <div className="view-switcher" aria-label="选择任务视图">
                       <button className={`view-button${view === "kanban" ? " active" : ""}`} onClick={() => setView("kanban")}>看板视图</button>
                       <button className={`view-button${view === "table" ? " active" : ""}`} onClick={() => setView("table")}>表格视图</button>
                       <button className={`view-button${view === "stats" ? " active" : ""}`} onClick={() => setView("stats")}>统计导出</button>
