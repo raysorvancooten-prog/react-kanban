@@ -176,8 +176,13 @@
     input:focus, select:focus, textarea:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(79, 70, 229, .1); }
     textarea { min-height: 82px; resize: vertical; line-height: 1.45; }
     textarea.long { min-height: 115px; }
-    .time-reminder-cell { display: grid; gap: .35rem; min-width: 170px; }
+    .time-reminder-cell { display: grid; gap: .35rem; min-width: 190px; }
     .time-reminder-cell label { color: var(--muted); font-size: .66rem; }
+    .time-range-toggle { width: 100%; padding: .45rem .6rem; border: 1px solid var(--border); border-radius: 8px; background: #fff; color: #344054; font-weight: 700; cursor: pointer; }
+    .time-range-toggle:hover { border-color: #a5b4fc; background: #f8faff; }
+    .time-range-summary { color: var(--muted); font-size: .68rem; line-height: 1.45; }
+    .auto-hours { min-width: 100px; font-weight: 750; color: #344054; }
+    .auto-hours small { display: block; margin-top: .25rem; color: var(--muted); font-weight: 500; line-height: 1.4; }
     .reminder-control { display: grid; gap: .35rem; }
     .reminder-display { color: var(--muted); font-size: .7rem; }
     .attachment-dialog {
@@ -508,6 +513,12 @@
     const ADD_PRIORITY_OPTION = "__add_priority__";
 
     const today = () => new Date().toISOString().slice(0, 10);
+    const localDateTimeValue = (value = new Date()) => {
+      const date = value instanceof Date ? value : new Date(value);
+      if (Number.isNaN(date.getTime())) return "";
+      const local = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
+      return local.toISOString().slice(0, 16);
+    };
     const makeId = () => `task-${Date.now()}-${Math.random().toString(16).slice(2)}`;
     const makeAttachmentId = () => `file-${Date.now()}-${Math.random().toString(16).slice(2)}`;
     const makeRowId = prefix => `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -587,6 +598,24 @@
     function formatHours(value) {
       const number = hoursNumber(value);
       return number === null ? "未填写" : `${Number.isInteger(number) ? number : number.toFixed(1)} 小时`;
+    }
+
+    function calculateElapsedHours(startAt, endAt) {
+      if (!startAt || !endAt) return "";
+      const start = new Date(startAt);
+      const end = new Date(endAt);
+      const milliseconds = end.getTime() - start.getTime();
+      if (!Number.isFinite(milliseconds) || milliseconds < 0) return "";
+      return String(Math.round((milliseconds / 3600000) * 100) / 100);
+    }
+
+    function displayDateTimeRangeValue(value) {
+      if (!value) return "未填写";
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) return String(value).replace("T", " ");
+      return new Intl.DateTimeFormat("zh-CN", {
+        month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false
+      }).format(date);
     }
 
     function extractActualHours(text) {
@@ -1014,28 +1043,47 @@
             status: ["未开始", "进行中", "已完成", "等待反馈", "需调整"].includes(item?.status) ? item.status : "未开始",
             dueText: typeof item === "object" ? (item?.dueText || "") : "",
             reminderAt: typeof item === "object" ? (item?.reminderAt || item?.reminderTime || "") : "",
-            actualHours: typeof item === "object" ? normalizeHours(item?.actualHours) : "",
+            startedAt: typeof item === "object" ? (item?.startedAt || item?.startAt || "") : "",
+            endedAt: typeof item === "object" ? (item?.endedAt || item?.endAt || "") : "",
+            actualHours: typeof item === "object" ? (calculateElapsedHours(item?.startedAt || item?.startAt, item?.endedAt || item?.endAt) || normalizeHours(item?.actualHours)) : "",
             feedbackNote: typeof item === "object" ? (item?.feedbackNote || "") : "",
             attachments: typeof item === "object" && Array.isArray(item?.attachments) ? item.attachments.map(normalizeAttachment) : []
           });
         });
       } else {
         normalizeNextActions(task.nextActions, task.nextAction).forEach(item => {
-          prepared.push({ id: item.id || makeRowId("exec"), text: item.text, status: item.status === "已完成" ? "已完成" : "未开始", dueText: item.dueText || "", reminderAt: "", actualHours: "", feedbackNote: "", attachments: [] });
+          prepared.push({ id: item.id || makeRowId("exec"), text: item.text, status: item.status === "已完成" ? "已完成" : "未开始", dueText: item.dueText || "", reminderAt: "", startedAt: "", endedAt: "", actualHours: "", feedbackNote: "", attachments: [] });
         });
         normalizeFeedbackItems(task.feedbackItems, task.feedbackRecords).forEach(item => {
-          prepared.push({ id: item.id || makeRowId("exec"), text: item.text || "反馈调整", status: "需调整", dueText: item.createdAt || "", reminderAt: "", actualHours: "", feedbackNote: item.text || "", attachments: item.attachments || [] });
+          prepared.push({ id: item.id || makeRowId("exec"), text: item.text || "反馈调整", status: "需调整", dueText: item.createdAt || "", reminderAt: "", startedAt: "", endedAt: "", actualHours: "", feedbackNote: item.text || "", attachments: item.attachments || [] });
         });
         normalizeProcessItems(task.processItems, task.processNotes).forEach(item => {
           const done = /已完成|完成了|整理完|做完|已提交/.test(item.text || "");
           const reviewLike = /复盘|总结|经验|下次|建议|最好|可优先|教训/.test(item.text || "");
           if (!reviewLike) {
-            prepared.push({ id: item.id || makeRowId("exec"), text: item.text, status: done ? "已完成" : "进行中", dueText: item.createdAt || "", reminderAt: "", actualHours: "", feedbackNote: "", attachments: item.attachments || [] });
+            prepared.push({ id: item.id || makeRowId("exec"), text: item.text, status: done ? "已完成" : "进行中", dueText: item.createdAt || "", reminderAt: "", startedAt: "", endedAt: "", actualHours: "", feedbackNote: "", attachments: item.attachments || [] });
           }
         });
       }
       return (keepEmpty ? prepared : prepared.filter(item => item.text.trim() || item.feedbackNote.trim() || item.attachments.length))
-        .map(item => ({ ...item, text: item.text.trim(), dueText: item.dueText.trim(), reminderAt: String(item.reminderAt || "").trim(), actualHours: normalizeHours(item.actualHours), feedbackNote: item.feedbackNote.trim() }));
+        .map(item => ({
+          ...item,
+          text: item.text.trim(),
+          dueText: item.dueText.trim(),
+          reminderAt: String(item.reminderAt || "").trim(),
+          startedAt: String(item.startedAt || "").trim(),
+          endedAt: String(item.endedAt || "").trim(),
+          actualHours: calculateElapsedHours(item.startedAt, item.endedAt) || normalizeHours(item.actualHours),
+          feedbackNote: item.feedbackNote.trim()
+        }));
+    }
+
+    function taskStatusFromExecutionItems(items, currentStatus = "new") {
+      const meaningfulItems = (items || []).filter(item => String(item?.text || "").trim());
+      if (!meaningfulItems.length) return currentStatus || "new";
+      if (meaningfulItems.every(item => item.status === "已完成")) return "done";
+      if (meaningfulItems.every(item => item.status === "未开始")) return "new";
+      return "inprogress";
     }
 
     function normalizeReviewItems(items, task = {}, keepEmpty = false) {
@@ -2042,13 +2090,13 @@
     }
 
     function downloadTaskICS(task) {
-      const exportRows = normalizeExecutionItems(task.executionItems, task).filter(item => item.dueText || item.reminderAt);
+      const exportRows = normalizeExecutionItems(task.executionItems, task).filter(item => item.startedAt || item.endedAt || item.dueText);
       const summaryItems = [
         task.startDate || task.deadline ? `任务：${task.title || "未命名任务"}` : "",
         ...exportRows.map(item => `节点：${item.text || "未命名节点"}`)
       ].filter(Boolean);
       if (!summaryItems.length) {
-        alert("没有可生成日历提醒的日期。请先填写任务开始/完成日期，或执行清单的目标/提醒时间。");
+        alert("没有可生成日历事项的日期。请先填写任务开始/完成日期，或执行清单的启动/结束时间。");
         return;
       }
       if (!window.confirm(`将下载日历提醒文件：\n- ${summaryItems.join("\n- ")}\n\n下载后请用 Outlook、系统日历或手机日历打开导入。`)) return;
@@ -2076,17 +2124,20 @@
         );
       }
       exportRows.forEach((item, index) => {
-        const dueDate = parseDateExpression(item.dueText) || parseDateExpression(item.reminderAt);
-        if (!dueDate && !item.reminderAt) return;
+        const timedStart = item.startedAt || item.endedAt;
+        const timedEnd = item.endedAt || (item.startedAt ? localDateTimeValue(new Date(new Date(item.startedAt).getTime() + 3600000)) : "");
+        const dueDate = parseDateExpression(item.dueText);
+        if (!timedStart && !dueDate) return;
+        const dateLines = timedStart
+          ? [`DTSTART:${icsDateTime(timedStart)}`, `DTEND:${icsDateTime(timedEnd)}`]
+          : [`DTSTART;VALUE=DATE:${icsDate(dueDate)}`, `DTEND;VALUE=DATE:${icsDate(addDaysToDateKey(dueDate, 1))}`];
         lines.push(
           "BEGIN:VEVENT",
           `UID:${uid}-step-${index + 1}`,
           `DTSTAMP:${stamp}`,
           `SUMMARY:${escapeICS(`节点：${item.text || "未命名节点"}`)}`,
-          `DTSTART;VALUE=DATE:${icsDate(dueDate || today())}`,
-          `DTEND;VALUE=DATE:${icsDate(addDaysToDateKey(dueDate || today(), 1))}`,
-          `DESCRIPTION:${escapeICS([`所属任务：${task.title || ""}`, `节点状态：${item.status || ""}`, `目标时间：${item.dueText || ""}`, `提醒时间：${item.reminderAt || NO_REMINDER}`, item.feedbackNote && `反馈/调整记录：${item.feedbackNote}`].filter(Boolean).join("\n"))}`,
-          ...calendarAlarmLines(item.reminderAt, item.text || "执行节点"),
+          ...dateLines,
+          `DESCRIPTION:${escapeICS([`所属任务：${task.title || ""}`, `节点状态：${item.status || ""}`, item.startedAt && `启动时间：${item.startedAt}`, item.endedAt && `结束时间：${item.endedAt}`, item.actualHours && `耗时：${item.actualHours} 小时`, item.feedbackNote && `反馈/调整记录：${item.feedbackNote}`].filter(Boolean).join("\n"))}`,
           "END:VEVENT"
         );
       });
@@ -2386,6 +2437,7 @@
       const [smartUpdatePreview, setSmartUpdatePreview] = useState(null);
       const [smartUpdateMessage, setSmartUpdateMessage] = useState("");
       const [smartUpdateListening, setSmartUpdateListening] = useState(false);
+      const [openExecutionTimes, setOpenExecutionTimes] = useState({});
       const [priorityOptions, setPriorityOptions] = useState(() => uniquePriorityOptions([...(availablePriorityOptions || []), task.priority]));
       const hasBasicInfo = Boolean(task.project || task.source || task.receivedDate || task.deadline || task.priority || task.status);
       const [openSections, setOpenSections] = useState({ basic: !hasBasicInfo, attachments: false, execution: true, final: false, review: false, legacy: false });
@@ -2438,14 +2490,16 @@
       const submit = event => {
         event.preventDefault();
         if (!form.title.trim()) return;
+        const normalizedExecutionItems = normalizeExecutionItems(form.executionItems, form);
         const prepared = {
           ...form,
           title: form.title.trim(),
+          status: taskStatusFromExecutionItems(normalizedExecutionItems, form.status),
           priority: normalizePriority(form.priority) || "优先级3",
           actualHours: normalizeHours(form.actualHours),
           reminderAt: form.reminderAt || "",
           reminder: form.reminderAt ? displayReminder(form.reminderAt) : NO_REMINDER,
-          executionItems: normalizeExecutionItems(form.executionItems, form),
+          executionItems: normalizedExecutionItems,
           nextActions: normalizeNextActions(form.nextActions),
           feedbackItems: normalizeFeedbackItems(form.feedbackItems),
           processItems: normalizeProcessItems(form.processItems),
@@ -3073,15 +3127,32 @@ Return strict JSON only. No markdown. No explanation. No code fence.`;
       };
 
       const updateExecutionItem = (index, field, value) => {
-        const executionItems = normalizeExecutionItems(form.executionItems, form, true);
-        executionItems[index] = { ...executionItems[index], [field]: value };
-        setForm({ ...form, executionItems });
+        setForm(current => {
+          const executionItems = normalizeExecutionItems(current.executionItems, current, true);
+          const previous = executionItems[index] || { id: makeRowId("exec"), text: "", status: "未开始", startedAt: "", endedAt: "", actualHours: "", feedbackNote: "", attachments: [] };
+          const nextItem = { ...previous, [field]: value };
+          if (field === "status" && value === "进行中" && !nextItem.startedAt) nextItem.startedAt = localDateTimeValue();
+          if (field === "status" && value === "已完成" && !nextItem.endedAt) nextItem.endedAt = localDateTimeValue();
+          if (field === "startedAt" && value && nextItem.status === "未开始") nextItem.status = "进行中";
+          if (field === "endedAt" && value) nextItem.status = "已完成";
+          if (field === "endedAt" && !value && nextItem.status === "已完成") nextItem.status = nextItem.startedAt ? "进行中" : "未开始";
+          nextItem.actualHours = calculateElapsedHours(nextItem.startedAt, nextItem.endedAt) || (nextItem.startedAt || nextItem.endedAt ? "" : normalizeHours(nextItem.actualHours));
+          executionItems[index] = nextItem;
+          return { ...current, executionItems, status: taskStatusFromExecutionItems(executionItems, current.status) };
+        });
       };
-      const addExecutionItem = () => setForm(current => ({ ...current, executionItems: [...normalizeExecutionItems(current.executionItems, current), { id: makeRowId("exec"), text: "", status: "未开始", dueText: "", reminderAt: "", actualHours: "", feedbackNote: "", attachments: [] }] }));
+      const addExecutionItem = () => setForm(current => ({
+        ...current,
+        executionItems: [...normalizeExecutionItems(current.executionItems, current), { id: makeRowId("exec"), text: "", status: "未开始", dueText: "", reminderAt: "", startedAt: "", endedAt: "", actualHours: "", feedbackNote: "", attachments: [] }]
+      }));
       const deleteExecutionItem = index => {
-        const executionItems = normalizeExecutionItems(form.executionItems, form, true).filter((_, itemIndex) => itemIndex !== index);
-        setForm({ ...form, executionItems });
+        setForm(current => {
+          const executionItems = normalizeExecutionItems(current.executionItems, current, true).filter((_, itemIndex) => itemIndex !== index);
+          return { ...current, executionItems, status: taskStatusFromExecutionItems(executionItems, current.status) };
+        });
       };
+
+      const toggleExecutionTime = key => setOpenExecutionTimes(current => ({ ...current, [key]: !current[key] }));
 
       const updateFeedbackItem = (index, field, value) => {
         const feedbackItems = normalizeFeedbackItems(form.feedbackItems, "", true);
@@ -3137,12 +3208,6 @@ Return strict JSON only. No markdown. No explanation. No code fence.`;
 
       const setTaskReminderAt = value => {
         setForm(current => ({ ...current, reminderAt: value, reminder: value ? displayReminder(value) : NO_REMINDER }));
-      };
-
-      const updateExecutionReminderMode = (index, value) => {
-        const executionItems = normalizeExecutionItems(form.executionItems, form, true);
-        executionItems[index] = { ...executionItems[index], reminderAt: value === "none" ? "" : (executionItems[index]?.reminderAt || `${today()}T09:00`) };
-        setForm({ ...form, executionItems });
       };
 
       const deleteRowAttachment = (section, rowIndex, attachmentId) => {
@@ -3402,10 +3467,13 @@ Return strict JSON only. No markdown. No explanation. No code fence.`;
                     <div className="section-content">
                       <div className="structured-table-wrap">
                         <table className="structured-table">
-                          <thead><tr><th>序号</th><th>事项/步骤</th><th>状态</th><th>时间/提醒</th><th>耗时</th><th>反馈/调整记录</th><th>相关附件</th><th>删除</th></tr></thead>
+                          <thead><tr><th>序号</th><th>事项/步骤</th><th>状态</th><th>时间段</th><th>自动耗时</th><th>反馈/调整记录</th><th>相关附件</th><th>删除</th></tr></thead>
                           <tbody>
-                            {executionChecklistItems.map((item, index) => (
-                              <tr key={item.id || index}>
+                            {executionChecklistItems.map((item, index) => {
+                              const timeKey = item.id || String(index);
+                              const hasTimeRange = Boolean(item.startedAt || item.endedAt);
+                              return (
+                              <tr key={timeKey}>
                                 <td data-label="序号" className="structured-index">{index + 1}</td>
                                 <td data-label="事项/步骤"><textarea value={item.text} onChange={event => updateExecutionItem(index, "text", event.target.value)} placeholder="填写要执行的事项或步骤" /></td>
                                 <td data-label="状态">
@@ -3413,27 +3481,35 @@ Return strict JSON only. No markdown. No explanation. No code fence.`;
                                     <option>未开始</option><option>进行中</option><option>已完成</option><option>等待反馈</option><option>需调整</option>
                                   </select>
                                 </td>
-                                <td data-label="时间/提醒">
+                                <td data-label="时间段">
                                   <div className="time-reminder-cell">
-                                    <label>目标时间</label>
-                                    <input type="date" value={parseDateExpression(item.dueText) || ""} onChange={event => updateExecutionItem(index, "dueText", event.target.value)} />
-                                    <label>提醒时间</label>
-                                    <select value={item.reminderAt ? "custom" : "none"} onChange={event => updateExecutionReminderMode(index, event.target.value)}>
-                                      <option value="none">不提醒</option>
-                                      <option value="custom">选择提醒时间</option>
-                                    </select>
-                                    {item.reminderAt !== "" && (
-                                      <input type="datetime-local" value={datetimeLocalFromReminder(item.reminderAt) || ""} onChange={event => updateExecutionItem(index, "reminderAt", event.target.value)} />
+                                    <button type="button" className="time-range-toggle" onClick={() => toggleExecutionTime(timeKey)}>
+                                      {openExecutionTimes[timeKey] ? "收起时间段" : (hasTimeRange ? "查看 / 修改时间段" : "设置时间段")}
+                                    </button>
+                                    {hasTimeRange && !openExecutionTimes[timeKey] && (
+                                      <span className="time-range-summary">{displayDateTimeRangeValue(item.startedAt)} → {displayDateTimeRangeValue(item.endedAt)}</span>
                                     )}
-                                    <span className="reminder-display">提醒：{displayReminder(item.reminderAt)}</span>
+                                    {openExecutionTimes[timeKey] && (
+                                      <>
+                                        <label>启动时间</label>
+                                        <input type="datetime-local" value={item.startedAt || ""} onChange={event => updateExecutionItem(index, "startedAt", event.target.value)} />
+                                        <label>结束时间</label>
+                                        <input type="datetime-local" min={item.startedAt || undefined} value={item.endedAt || ""} onChange={event => updateExecutionItem(index, "endedAt", event.target.value)} />
+                                      </>
+                                    )}
                                   </div>
                                 </td>
-                                <td data-label="耗时"><input type="number" min="0" step="0.25" value={item.actualHours || ""} onChange={event => updateExecutionItem(index, "actualHours", event.target.value)} placeholder="未填写" /></td>
+                                <td data-label="自动耗时">
+                                  <div className="auto-hours">
+                                    {formatHours(item.actualHours)}
+                                    {!item.actualHours && <small>填写启动和结束时间后自动计算</small>}
+                                  </div>
+                                </td>
                                 <td data-label="反馈/调整记录"><textarea value={item.feedbackNote} onChange={event => updateExecutionItem(index, "feedbackNote", event.target.value)} placeholder="记录反馈、调整原因或注意点" /></td>
                                 <td data-label="相关附件">{renderRowAttachments(item.attachments, "execution", index)}</td>
                                 <td data-label="删除"><button type="button" className="attachment-action danger" onClick={() => deleteExecutionItem(index)}>删除</button></td>
                               </tr>
-                            ))}
+                            )})}
                             {!executionChecklistItems.length && <tr><td colSpan="8">还没有执行清单。可以点击添加，或用智能入口拆解任务。</td></tr>}
                           </tbody>
                         </table>
@@ -3769,7 +3845,7 @@ Return strict JSON only. No markdown. No explanation. No code fence.`;
       ["reminderAt", "提醒时间"], ["priority", "优先级"], ["status", "当前进展"],
       ["workCycle", "工作周期（天）"], ["actualHours", "实际耗时（小时）"],
       ["executionText", "执行清单"], ["executionStatus", "执行清单状态"],
-      ["executionDue", "执行清单目标时间"], ["executionReminder", "执行清单提醒时间"],
+      ["executionStart", "执行清单启动时间"], ["executionEnd", "执行清单结束时间"],
       ["executionHours", "执行清单耗时"], ["feedbackNotes", "反馈/调整记录"],
       ["attachments", "附件"], ["finalResults", "交付成果"], ["reviewItems", "复盘小结"],
       ["createdAt", "创建时间"], ["updatedAt", "更新时间"]
@@ -3843,7 +3919,8 @@ Return strict JSON only. No markdown. No explanation. No code fence.`;
         const parts = [
           `${index + 1}. ${item.text || "未命名步骤"}`,
           item.status,
-          item.dueText && `目标：${formatDate(item.dueText) !== "—" ? dateKey(item.dueText).replace(/-/g, "/") : item.dueText}`,
+          item.startedAt && `启动：${item.startedAt.replace("T", " ")}`,
+          item.endedAt && `结束：${item.endedAt.replace("T", " ")}`,
           item.actualHours && `耗时：${item.actualHours}h`,
           item.feedbackNote && `反馈：${item.feedbackNote}`
         ].filter(Boolean);
@@ -3863,8 +3940,8 @@ Return strict JSON only. No markdown. No explanation. No code fence.`;
         actualHours: taskHours === null ? "未填写" : String(taskHours),
         executionText: joinText(formattedExecution),
         executionStatus: joinText(executionItems.map(item => `${item.text || "未命名步骤"}：${item.status}`)),
-        executionDue: joinText(executionItems.map(item => item.dueText ? `${item.text || "未命名步骤"}：${item.dueText}` : "")),
-        executionReminder: joinText(executionItems.map(item => item.reminderAt ? `${item.text || "未命名步骤"}：${displayReminder(item.reminderAt)}` : "")),
+        executionStart: joinText(executionItems.map(item => item.startedAt ? `${item.text || "未命名步骤"}：${item.startedAt.replace("T", " ")}` : "")),
+        executionEnd: joinText(executionItems.map(item => item.endedAt ? `${item.text || "未命名步骤"}：${item.endedAt.replace("T", " ")}` : "")),
         executionHours: joinText(executionItems.map(item => item.actualHours ? `${item.text || "未命名步骤"}：${item.actualHours}` : "")),
         feedbackNotes: joinText(executionItems.map(item => item.feedbackNote)),
         attachments: joinText(attachmentNames),
