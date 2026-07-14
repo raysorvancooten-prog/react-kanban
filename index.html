@@ -1098,9 +1098,53 @@
       return String(value || "")
         .toLowerCase()
         .replace(/seefar[-\s]?ozon/g, "")
-        .replace(/(?:今天|现在|决定|开始处理|开始做|处理完|完成|已经|开始|先|再|然后|目标品类|对应的|该品类|这个步骤|这一步|这项|这个子任务|子任务|之后|以后)/g, "")
+        .replace(/名字/g, "名称")
+        .replace(/种类/g, "类型")
+        .replace(/(?:今天|现在|决定|开始处理|开始做|处理完|完成|已经|刚刚|刚|终于|开始|先|再|然后|目标品类|对应的|该品类|这个步骤|这一步|这项|这个子任务|子任务|之后|以后)/g, "")
+        .replace(/的/g, "")
         .replace(/[^\p{L}\p{N}]+/gu, "")
         .trim();
+    }
+
+    function chineseNumberValue(value) {
+      const text = String(value || "").trim();
+      if (/^\d+$/.test(text)) return Number(text);
+      const digits = { 零: 0, 一: 1, 二: 2, 两: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9 };
+      if (text === "十") return 10;
+      if (/^十[一二三四五六七八九]$/.test(text)) return 10 + digits[text[1]];
+      if (/^[一二三四五六七八九]十$/.test(text)) return digits[text[0]] * 10;
+      if (/^[一二三四五六七八九]十[一二三四五六七八九]$/.test(text)) return digits[text[0]] * 10 + digits[text[2]];
+      return digits[text] || 0;
+    }
+
+    function executionOrdinalIndex(text) {
+      return executionOrdinalIndices(text)[0] ?? -1;
+    }
+
+    function executionOrdinalIndices(text) {
+      const value = String(text || "");
+      const segments = [];
+      const patterns = [
+        /(?:序号|事件|事项|步骤|执行项)\s*(?:第)?\s*([\d一二两三四五六七八九十、,，和及与到至\-~—\s]+)/g,
+        /第\s*([\d一二两三四五六七八九十、,，和及与到至\-~—\s]+)\s*(?:个)?\s*(?:事件|事项|步骤|执行项|子任务|项)/g
+      ];
+      patterns.forEach(pattern => {
+        let match;
+        while ((match = pattern.exec(value))) segments.push(match[1].trim());
+      });
+      const indices = [];
+      segments.forEach(segment => {
+        const tokens = segment.match(/\d+|[一二两三四五六七八九十]+/g) || [];
+        const numbers = tokens.map(chineseNumberValue).filter(number => number > 0);
+        if (numbers.length === 2 && /到|至|\-|~|—/.test(segment)) {
+          const [start, end] = numbers;
+          const direction = start <= end ? 1 : -1;
+          for (let number = start; direction > 0 ? number <= end : number >= end; number += direction) indices.push(number - 1);
+        } else {
+          numbers.forEach(number => indices.push(number - 1));
+        }
+      });
+      return [...new Set(indices.filter(index => index >= 0))];
     }
 
     function executionTextSimilarity(first, second) {
@@ -1122,16 +1166,14 @@
     }
 
     function findExecutionItemIndex(items, text) {
-      let bestIndex = -1;
-      let bestScore = 0;
-      items.forEach((item, index) => {
-        const score = executionTextSimilarity(item.text, text);
-        if (score > bestScore) {
-          bestIndex = index;
-          bestScore = score;
-        }
-      });
-      return bestScore >= .42 ? bestIndex : -1;
+      const ranked = items
+        .map((item, index) => ({ index, score: executionTextSimilarity(item.text, text) }))
+        .sort((first, second) => second.score - first.score);
+      const best = ranked[0];
+      const second = ranked[1];
+      if (!best || best.score < .36) return -1;
+      if (second?.score >= .36 && best.score - second.score < .12) return -1;
+      return best.index;
     }
 
     function mergeExecutionItems(existingItems, incomingItems, task = {}) {
@@ -2265,12 +2307,22 @@
       if (!value) return null;
       const actualHours = extractActualHours(value);
       const nowValue = localDateTimeValue();
-      let match = value.match(/(?:我\s*)?(?:今天|现在)?\s*(?:我\s*)?(?:已经)?\s*(?:处理完了?|做完了?|完成了?)\s*([^，。；;\n]+)/);
-      if (match?.[1]) return { matchText: cleanExecutionStep(removeActualHoursText(match[1])), text: cleanExecutionStep(removeActualHoursText(match[1])), status: "已完成", endedAt: nowValue, actualHours, feedbackNote: "" };
+      const ordinalIndex = executionOrdinalIndex(value);
+      if (ordinalIndex >= 0) {
+        const ordinalLabel = `序号${ordinalIndex + 1}`;
+        const ordinalFields = executionCommandFields(value);
+        if (ordinalFields) return { targetIndex: ordinalIndex, matchText: ordinalLabel, text: ordinalLabel, ...ordinalFields, requiresExistingMatch: true };
+      }
+      let match = value.match(/(?:我\s*)?(?:今天|现在)?\s*(?:我\s*)?(?:已经|刚刚?|终于)?\s*(?:处理完了?|做完了?|完成了?)\s*([^，。；;\n]+)/);
+      if (match?.[1]) return { matchText: cleanExecutionStep(removeActualHoursText(match[1])), text: cleanExecutionStep(removeActualHoursText(match[1])), status: "已完成", endedAt: nowValue, actualHours, feedbackNote: "", requiresExistingMatch: true };
       match = value.match(/(.+?)(?:这一步|这项|这个步骤)?(?:已经完成|已完成|做完了|完成了)/);
-      if (match?.[1]) return { matchText: cleanExecutionStep(removeActualHoursText(match[1])), text: cleanExecutionStep(removeActualHoursText(match[1])), status: "已完成", endedAt: nowValue, actualHours, feedbackNote: "" };
+      if (match?.[1]) return { matchText: cleanExecutionStep(removeActualHoursText(match[1])), text: cleanExecutionStep(removeActualHoursText(match[1])), status: "已完成", endedAt: nowValue, actualHours, feedbackNote: "", requiresExistingMatch: true };
+      match = value.match(/(.+?)(?:还没开始|未开始|暂不处理|先不做)/);
+      if (match?.[1]) return { matchText: cleanExecutionStep(removeActualHoursText(match[1])), text: cleanExecutionStep(removeActualHoursText(match[1])), status: "未开始", actualHours, feedbackNote: "", requiresExistingMatch: true };
       match = value.match(/(?:我)?\s*(?:决定)?\s*(?:今天|现在)?\s*(?:要|就)?\s*(?:开始处理|开始做|着手处理|着手做|开始)\s*(?:先)?\s*([^，。；;\n]+)/);
-      if (match?.[1]) return { matchText: cleanExecutionStep(removeActualHoursText(match[1])), text: cleanExecutionStep(removeActualHoursText(match[1])), status: "进行中", startedAt: nowValue, actualHours, feedbackNote: "" };
+      if (match?.[1]) return { matchText: cleanExecutionStep(removeActualHoursText(match[1])), text: cleanExecutionStep(removeActualHoursText(match[1])), status: "进行中", startedAt: nowValue, actualHours, feedbackNote: "", requiresExistingMatch: true };
+      match = value.match(/(.+?)(?:现在|已经)?(?:开始处理|开始做|开始了|启动了|开始)$/);
+      if (match?.[1]) return { matchText: cleanExecutionStep(removeActualHoursText(match[1])), text: cleanExecutionStep(removeActualHoursText(match[1])), status: "进行中", startedAt: nowValue, actualHours, feedbackNote: "", requiresExistingMatch: true };
       match = value.match(/(.+?)(?:等|等待|待)(?:老板|领导|客户|供应商)?反馈/);
       if (match?.[1]) return { matchText: cleanExecutionStep(removeActualHoursText(match[1])), text: cleanExecutionStep(removeActualHoursText(match[1])), status: "等待反馈", actualHours, feedbackNote: "等待反馈" };
       match = value.match(/(?:老板|领导|客户|供应商)?反馈(?:说)?(.+?)要调整/);
@@ -2282,14 +2334,96 @@
       return null;
     }
 
-    function parseSmartUpdate(text) {
+    function executionCommandFields(text) {
+      const value = String(text || "");
+      const completionValue = value.replace(/未完成|没完成|还没完成|尚未完成/g, "");
+      const nowValue = localDateTimeValue();
+      const actualHours = extractActualHours(value);
+      if (/处理完|做完|完成|已完成|结束/.test(completionValue)) return { status: "已完成", endedAt: nowValue, actualHours, feedbackNote: "" };
+      if (/等待反馈|等反馈|待反馈/.test(value)) return { status: "等待反馈", actualHours, feedbackNote: "等待反馈" };
+      if (/调整|修改|重做|返工/.test(value)) return { status: "需调整", actualHours, feedbackNote: value.trim() };
+      if (/开始|启动|着手|进行/.test(value)) return { status: "进行中", startedAt: nowValue, actualHours, feedbackNote: "" };
+      if (/未开始|还没开始|暂不处理|先不做/.test(value)) return { status: "未开始", actualHours, feedbackNote: "" };
+      return null;
+    }
+
+    function ordinalUpdate(index, commandText, fields) {
+      return {
+        targetIndex: index,
+        matchText: `序号${index + 1}`,
+        text: `序号${index + 1}`,
+        ...fields,
+        commandText,
+        requiresExistingMatch: true
+      };
+    }
+
+    function inferExecutionUpdates(text, existingItems = []) {
+      const value = String(text || "").trim();
+      if (!value) return [];
+      const items = normalizeExecutionItems(existingItems, {}, true);
+      const allIndices = items.map((_, index) => index);
+      const overallFields = executionCommandFields(value);
+      const updates = [];
+
+      if (overallFields && /除了/.test(value) && /其他|其余|剩下/.test(value)) {
+        const excludedPart = value.match(/除了(.+?)(?:之外|以外|，|,|其他|其余|剩下)/)?.[1] || "";
+        const excluded = new Set(executionOrdinalIndices(excludedPart));
+        allIndices.filter(index => !excluded.has(index)).forEach(index => updates.push(ordinalUpdate(index, value, overallFields)));
+      } else if (overallFields) {
+        const frontMatch = value.match(/前\s*(\d+|[一二两三四五六七八九十]+)\s*(?:个|项|条)/);
+        const lastMatch = value.match(/(?:后|最后)\s*(\d+|[一二两三四五六七八九十]+)\s*(?:个|项|条)/);
+        if (frontMatch) {
+          const count = chineseNumberValue(frontMatch[1]);
+          allIndices.slice(0, count).forEach(index => updates.push(ordinalUpdate(index, value, overallFields)));
+        } else if (lastMatch) {
+          const count = chineseNumberValue(lastMatch[1]);
+          allIndices.slice(Math.max(0, allIndices.length - count)).forEach(index => updates.push(ordinalUpdate(index, value, overallFields)));
+        } else if (/剩下|其余|未完成的|还没完成的/.test(value) && /全部|都|所有/.test(value)) {
+          allIndices.filter(index => items[index]?.status !== "已完成").forEach(index => updates.push(ordinalUpdate(index, value, overallFields)));
+        } else if (/(?:全部|所有)(?:事项|事件|步骤|执行项|子任务)?|(?:事项|事件|步骤|执行项|子任务)全部/.test(value)) {
+          allIndices.forEach(index => updates.push(ordinalUpdate(index, value, overallFields)));
+        }
+      }
+
+      if (!updates.length) {
+        const clauses = value.split(/[，,。；;\n]+/).map(clause => clause.trim()).filter(Boolean);
+        clauses.forEach(clause => {
+          const fields = executionCommandFields(clause);
+          const indices = executionOrdinalIndices(clause);
+          if (fields && indices.length) {
+            indices.forEach(index => updates.push(ordinalUpdate(index, clause, fields)));
+            return;
+          }
+          const inferred = inferExecutionUpdate(clause);
+          if (inferred) updates.push(inferred);
+        });
+      }
+
+      if (!updates.length) {
+        const inferred = inferExecutionUpdate(value);
+        if (inferred) updates.push(inferred);
+      }
+
+      const unique = [];
+      updates.forEach(update => {
+        const key = Number.isInteger(update.targetIndex)
+          ? `index:${update.targetIndex}:${update.status}`
+          : `text:${comparableExecutionText(update.matchText || update.text)}:${update.status}`;
+        if (!unique.some(item => item.key === key)) unique.push({ key, update });
+      });
+      return unique.map(item => item.update);
+    }
+
+    function parseSmartUpdate(text, existingExecutionItems = []) {
       const compact = String(text || "").trim();
       const attachments = parseAttachmentLinks(compact);
       const contentText = removeAttachmentLines(compact);
       const result = { status: inferTaskStatusFromText(compact), startDate: extractStartDate(compact), dueDate: extractCompletionDate(compact), reminder: normalizeReminder(compact), actualHours: /(?:这个|整个)?任务/.test(compact) ? extractActualHours(compact) : "", executionUpdates: [], executionItems: [], feedbackItems: [], nextActions: [], processItems: [], finalResults: [], reviewItems: [], attachments };
       if (!compact) return result;
-      const executionUpdate = inferExecutionUpdate(contentText);
-      if (executionUpdate) result.executionUpdates.push({ ...executionUpdate, attachments });
+      inferExecutionUpdates(contentText, existingExecutionItems).forEach(executionUpdate => {
+        result.executionUpdates.push({ ...executionUpdate, attachments });
+      });
 
       const hasFeedback = /反馈|老板反馈|客户反馈|供应商反馈|领导反馈/.test(contentText);
       const hasExplicitNextAction = /下一步|接下来/.test(contentText);
@@ -2358,7 +2492,7 @@
         if (hasProcess && !result.executionItems.length && !result.executionUpdates.length) {
           const processText = contentText.replace(/(?:，|,)?(?:明天|后天|本周|下周|周[一二三四五六日天]|星期[一二三四五六日天])[^，。；;\n]+/, "").trim();
           addProcess(processText || contentText, attachments);
-        } else if (!result.nextActions.length && contentText) {
+        } else if (!result.nextActions.length && contentText && !result.executionUpdates.length) {
           addProcess(contentText, attachments);
         }
       }
@@ -2602,9 +2736,23 @@
           setSmartUpdateMessage("请先输入或语音补充一段更新内容。");
           return;
         }
-        const preview = parseSmartUpdate(text);
+        const preview = parseSmartUpdate(text, form.executionItems);
+        const currentExecutionItems = normalizeExecutionItems(form.executionItems, form, true);
+        preview.executionUpdates = (preview.executionUpdates || []).map(update => {
+          const resolvedIndex = Number.isInteger(update.targetIndex)
+            ? (currentExecutionItems[update.targetIndex] ? update.targetIndex : -1)
+            : findExecutionItemIndex(currentExecutionItems, update.matchText || update.text);
+          return {
+            ...update,
+            resolvedIndex,
+            resolvedText: resolvedIndex >= 0 ? currentExecutionItems[resolvedIndex].text : ""
+          };
+        });
         setSmartUpdatePreview(preview);
-        setSmartUpdateMessage("已生成补充预览，确认后点击“应用补充内容”。");
+        const unresolved = preview.executionUpdates.find(update => update.requiresExistingMatch && update.resolvedIndex < 0);
+        setSmartUpdateMessage(unresolved
+          ? `没有找到“${unresolved.matchText || unresolved.text}”对应的执行项，请补充序号或更多关键词后重试。`
+          : "已匹配执行项并生成预览，确认后点击“应用解析结果”。");
       };
 
       const applySmartUpdate = () => {
@@ -2628,7 +2776,11 @@
         if (smartUpdatePreview.executionUpdates?.length) {
           const existingExecutionItems = normalizeExecutionItems(next.executionItems, next, true);
           smartUpdatePreview.executionUpdates.forEach(update => {
-            const targetIndex = findExecutionItemIndex(existingExecutionItems, update.matchText || update.text);
+            const targetIndex = Number.isInteger(update.resolvedIndex)
+              ? update.resolvedIndex
+              : (Number.isInteger(update.targetIndex) && existingExecutionItems[update.targetIndex]
+                ? update.targetIndex
+                : findExecutionItemIndex(existingExecutionItems, update.matchText || update.text));
             if (targetIndex >= 0) {
               const updatedItem = {
                 ...existingExecutionItems[targetIndex],
@@ -2640,7 +2792,7 @@
                 attachments: [...(existingExecutionItems[targetIndex].attachments || []), ...(update.attachments || [])]
               };
               existingExecutionItems[targetIndex] = executionItemWithAutomaticTiming(updatedItem);
-            } else {
+            } else if (!update.requiresExistingMatch) {
               existingExecutionItems.push(executionItemWithAutomaticTiming({
                 id: makeRowId("exec"),
                 text: update.text || update.matchText || "执行记录",
@@ -3184,8 +3336,7 @@ Return strict JSON only. No markdown. No explanation. No code fence.`;
           const transcript = Array.from(event.results).map(result => result[0].transcript).join(" ");
           const nextText = `${smartUpdateText}${smartUpdateText ? " " : ""}${transcript}`;
           setSmartUpdateText(nextText);
-          setSmartUpdatePreview(parseSmartUpdate(nextText));
-          setSmartUpdateMessage("已识别语音补充，并生成预览。确认后点击“应用补充内容”。");
+          parseSmartUpdateText(nextText);
         };
         recognition.start();
       };
@@ -3412,7 +3563,7 @@ Return strict JSON only. No markdown. No explanation. No code fence.`;
                   <section className="smart-update">
                     <h3>智能入口</h3>
                     <p className="smart-update-intro">更新任务：输入开始、完成或反馈内容，会优先关联已有执行项，再更新状态和时间。</p>
-                    <textarea value={smartUpdateText} onChange={event => { setSmartUpdateText(event.target.value); setSmartUpdatePreview(null); }} placeholder="例如：我今天开始处理查找产品类型和材质 / 我已经处理完查找产品类型和材质 / 老板反馈说 SOP 要加负责人…" />
+                    <textarea value={smartUpdateText} onChange={event => { setSmartUpdateText(event.target.value); setSmartUpdatePreview(null); }} placeholder="例如：完成事项2和3 / 事项2开始，事项3等待反馈 / 剩下的事项全部开始处理 / 我完成了查找目标品类的类型…" />
                     <div className="quick-actions">
                       <button type="button" className="btn btn-secondary" onClick={() => parseSmartUpdateText()}>解析补充</button>
                       <button type="button" className={`btn btn-secondary${smartUpdateListening ? " mic-active" : ""}`} onClick={startSmartUpdateVoice}>{smartUpdateListening ? "正在听…" : "语音补充"}</button>
@@ -3427,7 +3578,7 @@ Return strict JSON only. No markdown. No explanation. No code fence.`;
                           {smartUpdatePreview.startDate && <li>开始日期：{smartUpdatePreview.startDate}</li>}
                           {smartUpdatePreview.dueDate && <li>完成日期：{smartUpdatePreview.dueDate}</li>}
                           {smartUpdatePreview.reminder && <li>提醒时间：{displayReminder(smartUpdatePreview.reminder)}</li>}
-                          {smartUpdatePreview.executionUpdates?.map((item, index) => <li key={`exec-update-${index}`}>执行清单更新：{item.text || item.matchText}｜{item.status}{item.startedAt ? `｜启动：${item.startedAt.replace("T", " ")}` : ""}{item.endedAt ? `｜结束：${item.endedAt.replace("T", " ")}` : ""}{item.actualHours ? `｜耗时：${formatHours(item.actualHours)}` : ""}{item.feedbackNote ? `｜${item.feedbackNote}` : ""}</li>)}
+                          {smartUpdatePreview.executionUpdates?.map((item, index) => <li key={`exec-update-${index}`}>执行清单更新：{item.resolvedIndex >= 0 ? `序号${item.resolvedIndex + 1} · ${item.resolvedText}` : (item.text || item.matchText)}｜{item.status}{item.startedAt ? `｜启动：${item.startedAt.replace("T", " ")}` : ""}{item.endedAt ? `｜结束：${item.endedAt.replace("T", " ")}` : ""}{item.actualHours ? `｜耗时：${formatHours(item.actualHours)}` : ""}{item.feedbackNote ? `｜${item.feedbackNote}` : ""}{item.requiresExistingMatch && item.resolvedIndex < 0 ? "｜未找到匹配项，不会自动修改" : ""}</li>)}
                           {smartUpdatePreview.executionItems.map((item, index) => <li key={`exec-${index}`}>执行清单：{item.text || "仅附件"}｜{item.status}{item.startedAt ? `｜启动：${item.startedAt.replace("T", " ")}` : ""}{item.endedAt ? `｜结束：${item.endedAt.replace("T", " ")}` : ""}{item.actualHours ? `｜耗时：${formatHours(item.actualHours)}` : ""}{item.feedbackNote ? `｜${item.feedbackNote}` : ""}</li>)}
                           {smartUpdatePreview.finalResults.map((item, index) => <li key={`final-${index}`}>交付结果：{item.text || "仅附件"}</li>)}
                           {smartUpdatePreview.reviewItems.map((item, index) => <li key={`review-${index}`}>复盘小结：{item.text || "仅附件"}</li>)}

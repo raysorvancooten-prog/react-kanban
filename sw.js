@@ -1,4 +1,4 @@
-const CACHE_NAME = "daily-work-tracker-shell-v5";
+const CACHE_NAME = "daily-work-tracker-shell-v8";
 const APP_SHELL = [
   "./",
   "./index.html",
