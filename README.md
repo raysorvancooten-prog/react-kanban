@@ -6,12 +6,16 @@ The app remains a single `index.html` file. Firebase Authentication provides Goo
 
 ## Features
 
-- Six stages: **New**, **To Do**, **In Progress**, **Waiting for Feedback**, **Done**, and **Archived**
+- Three workflow stages: **收集箱**, **进行中**, and **已完成**
+- Kanban View for moving work through its workflow
+- Table View for searching, filtering, sorting, and reviewing tasks
+- Smart Quick Entry for turning Chinese or English paragraphs into task-field previews
 - Detailed task records and long-form notes
 - Drag-and-drop status changes
 - Google Sign-In
 - Private task collections for each user
 - Real-time synchronization through Cloud Firestore
+- Direct Google Calendar synchronization for dated tasks and execution items
 - Clear **Not signed in**, **Syncing**, **Synced**, and **Sync failed** indicators
 - Per-account browser cache and an optional import for tasks from the old local-only version
 
@@ -90,6 +94,48 @@ Replace the entire object with the exact `firebaseConfig` object shown in **Fire
 
 The Firebase web configuration identifies your Firebase project; it is designed to be included in browser code. Data access is protected by Authentication and the Firestore security rules above.
 
+## Google Calendar synchronization
+
+The app can connect directly to a user's Google Calendar. The task tracker remains the source of truth: saving, changing, dragging, or deleting a task can update the matching Google Calendar event. Changes made directly in Google Calendar do not update the task tracker.
+
+### Google Cloud setup
+
+1. In the existing Google Cloud project, enable **Google Calendar API**.
+2. In **Google Auth Platform → Data access**, add this scope:
+
+```text
+https://www.googleapis.com/auth/calendar.events
+```
+
+3. Create a separate OAuth client with application type **Web application**.
+4. Add the GitHub Pages origin under **Authorized JavaScript origins**, for example:
+
+```text
+https://raysorvancooten-prog.github.io
+```
+
+Use only the origin here, without the repository path or trailing slash. The pop-up token flow does not require a redirect URI.
+
+The public OAuth client ID is stored in `GOOGLE_CALENDAR_CLIENT_ID` in `index.html`. An OAuth client ID is a public web-app identifier. Never add an OAuth client secret to `index.html`.
+
+Calendar access is considered a sensitive Google OAuth scope. An unverified production app may display an unverified-app warning and is subject to Google's user limit. Complete Google OAuth verification before broadly publishing calendar access.
+
+### Connect and use
+
+1. Sign in to the task tracker.
+2. Select **日历同步** in the header.
+3. Select **连接Google日历** and approve access to calendar events.
+4. Keep **保存任务时自动同步** enabled.
+5. Select **同步现有任务** once to add existing dated tasks.
+
+Task start and completion dates create an all-day task event. Execution checklist rows with a start/end time create separate timed events. The app stores only returned Google event IDs in the task record so later saves update the same event instead of creating duplicates.
+
+The Google access token is kept only in the current browser session. It is not saved to Firestore or included in exports. When the short-lived Google authorization expires, reconnect from **日历同步**; task saving continues even if calendar synchronization fails.
+
+Deleting a task asks whether its matching Google events should also be deleted. If Google Calendar is disconnected, the task can still be deleted, but old calendar events must be removed manually after reconnecting.
+
+The existing `.ics` download remains available as a fallback for other calendar applications.
+
 ## Publish through GitHub Pages
 
 If GitHub Pages is already working:
@@ -126,6 +172,103 @@ The status beside the account controls indicates the connection state:
 
 Google Sign-In opens a pop-up. If a phone or browser blocks it, allow pop-ups for the GitHub Pages site and try again.
 
+## Kanban View and Table View
+
+Use the switcher near the top of the signed-in app to choose a view. Both views use the same Firestore task records, so editing a task in either view updates the other view and every signed-in device.
+
+### Kanban View
+
+Kanban View is the main workflow workspace. It keeps all six columns and drag-and-drop behavior. Drag a task between columns to update its status, or select a card to open the full task details.
+
+### Table View
+
+Table View is designed for search, filtering, sorting, and review. Each task appears as a row on desktop. On a phone, the same results appear as compact cards so the page does not require a very wide table.
+
+Select any table row or mobile task card to open the same detail and editing form used by Kanban View.
+
+Table View shows:
+
+- Title
+- Status
+- Project or category
+- Task source
+- Priority
+- Created date
+- Due date
+- Last updated time
+- Final result or summary
+
+New tasks receive a Firestore creation timestamp. For tasks created before Table View was added, the received date is shown as the created date when no creation timestamp exists.
+
+### Filters
+
+- **Search keyword** searches titles, projects, sources, background, next actions, process notes, feedback, final results, and links.
+- **Status** shows tasks in one workflow stage.
+- **Project / Category** shows tasks assigned to one existing project or category.
+- **Priority** filters by Low, Medium, or High.
+- **Created from / Created to** filters by creation date. Older tasks use their received date as a fallback.
+- **Show only unfinished tasks** hides Done and Archived tasks.
+- **Show only tasks waiting for feedback** shows only the Waiting for Feedback column.
+
+Filters can be combined. For example, choose a project, High priority, and unfinished tasks to review urgent open work for that project.
+
+Use **Sort by** to order results by created date, due date, last updated time, status, or priority. The adjacent button switches between ascending and descending order.
+
+## Smart Quick Entry
+
+Smart Quick Entry helps create a task from a natural-language paragraph without removing the manual form.
+
+1. Select **Smart Quick Entry** near **+ New task**.
+2. Type, paste, or dictate a Chinese or English description.
+3. Select **AI Parse** or **Rule Parse**.
+4. Review the parsed result preview.
+5. Select **Apply parsed result** to copy non-empty parsed values into the task form.
+6. Review or edit the fields manually, then select **Save task**.
+
+Parsing never changes the form immediately. Existing form values remain untouched until **Apply parsed result** is selected. Saving still uses the normal Firestore task flow, so tasks created through Smart Quick Entry synchronize exactly like manually created tasks.
+
+### AI Parse
+
+AI Parse sends the quick-entry paragraph to the API endpoint configured in **AI Settings**. It asks the model to return structured JSON containing only information found in the paragraph. Missing information should remain blank.
+
+The configured endpoint must accept an OpenAI-compatible Chat Completions request and allow browser requests from the GitHub Pages domain. Some providers intentionally block browser-side requests with CORS rules; in that case, use a private backend endpoint or Rule Parse.
+
+### Rule Parse
+
+Rule Parse works entirely in the browser and does not require an API key. It recognizes common Chinese and English expressions for:
+
+- Priority
+- Workflow status
+- Relative and written due dates
+- Next action
+- Feedback
+- Final result
+- Common assignment phrases and task titles
+
+Rule Parse is intentionally conservative and may leave fields blank. Review its preview and complete anything it could not detect manually.
+
+### Dictation
+
+Select **Dictate** to use the browser's speech-recognition feature when available. The browser may ask for microphone permission. If speech recognition is unavailable, type or paste the paragraph instead.
+
+## Configure AI settings
+
+1. Sign in and select **AI Settings** in the header or Smart Quick Entry section.
+2. Keep the provider name as **OpenAI-compatible**, or enter the name of the compatible provider.
+3. Enter the full API endpoint, such as the provider's `/v1/chat/completions` endpoint.
+4. Enter the API key and model name.
+5. Select **Save settings**.
+
+The settings are stored under `dailyWorkTrackerAISettings` in that browser's `localStorage`. They are not saved to Firestore and do not synchronize to other devices. Configure each trusted device separately.
+
+### API-key safety
+
+Never hard-code an AI API key in `index.html`, commit it to GitHub, or use a shared/public key. A GitHub Pages site is public, so secrets placed in its source are visible to everyone.
+
+Browser-local storage avoids publishing the key, but scripts running on the same website can still access it. Use a restricted personal key with spending limits when the provider supports them. For stronger security, configure the app to call a private backend endpoint that keeps the provider key on the server.
+
+The AI key is used only when **AI Parse** is selected. Rule Parse, manual entry, Firebase Authentication, and Firestore synchronization do not use it.
+
 ## How data is stored
 
 The main copy of each task is stored in this Firestore path:
@@ -136,7 +279,7 @@ users/{uid}/tasks/{taskId}
 
 The `{uid}` is supplied by Firebase Authentication. This separates one account's tasks from another account's tasks.
 
-The app also keeps a per-account `localStorage` cache so the last received tasks can appear while Firestore reconnects. Firestore remains the source of truth after sign-in; clearing the cache does not delete cloud tasks.
+The app also keeps a per-account `localStorage` cache so the last received tasks can appear while Firestore reconnects. Firestore remains the source of truth after sign-in; clearing the cache does not delete cloud tasks. Kanban View and Table View both read from the same real-time Firestore listener.
 
 If tasks from the old local-only app are found, the signed-in app displays **Import into my account**. Use it once on the device that contains those old tasks. The local copy is removed only after the Firestore import succeeds.
 
@@ -161,8 +304,11 @@ For longer notes, begin each update with a date:
 
 ```text
 react-kanban/
-├── index.html   # Complete app, Firebase integration, interface, logic, and styles
-└── README.md    # Firebase setup and usage guide
+├── index.html              # Complete app, Firebase integration, interface, logic, and styles
+├── manifest.webmanifest    # PWA installation metadata
+├── sw.js                   # App-shell service worker
+├── icons/                  # PWA icons
+└── README.md               # Setup and usage guide
 ```
 
 ## Technology
@@ -172,5 +318,6 @@ react-kanban/
 - Firebase Web SDK loaded as browser modules from the Firebase CDN
 - Firebase Authentication with Google Sign-In
 - Cloud Firestore real-time listeners
+- Google Identity Services and Google Calendar REST API
 - Native HTML drag and drop
 - Plain CSS

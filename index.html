@@ -13,6 +13,7 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; }
     :root {
@@ -368,6 +369,17 @@
     .settings-modal { width: min(620px, 100%); }
     .settings-warning { margin: 0 0 1rem; padding: .75rem; border-radius: 8px; background: #fff7ed; color: #9a3412; font-size: .76rem; line-height: 1.45; }
     .settings-actions { display: flex; justify-content: flex-end; gap: .6rem; }
+    .calendar-provider { display: grid; gap: .75rem; padding: 1rem; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-soft); }
+    .calendar-provider-header { display: flex; align-items: flex-start; justify-content: space-between; gap: .75rem; }
+    .calendar-provider-header h3 { margin: 0; font-size: .9rem; }
+    .calendar-provider-header p { margin: .2rem 0 0; color: var(--muted); font-size: .73rem; line-height: 1.45; }
+    .calendar-connection-state { flex: 0 0 auto; border-radius: 999px; padding: .24rem .5rem; background: #e5e7eb; color: #475467; font-size: .68rem; font-weight: 750; }
+    .calendar-connection-state.connected { background: #dcfce7; color: #166534; }
+    .calendar-setting-row { display: flex; align-items: center; justify-content: space-between; gap: .75rem; padding-top: .75rem; border-top: 1px solid var(--border); }
+    .calendar-setting-row strong { display: block; font-size: .78rem; }
+    .calendar-setting-row span { display: block; margin-top: .15rem; color: var(--muted); font-size: .7rem; line-height: 1.4; }
+    .calendar-message { margin: 0; padding: .65rem .75rem; border-radius: 8px; background: #eef2ff; color: #3730a3; font-size: .74rem; line-height: 1.45; }
+    .calendar-actions { display: flex; flex-wrap: wrap; gap: .5rem; }
     .mic-active { background: #fee2e2; border-color: #fca5a5; color: #b91c1c; }
     @media (max-width: 700px) {
       header { align-items: flex-start; padding: .85rem 1rem; }
@@ -504,6 +516,10 @@
     const LOCAL_FILE_DB = "dailyWorkTrackerLocalFiles";
     const LOCAL_FILE_STORE = "handles";
     const NO_REMINDER = "不提醒";
+    const GOOGLE_CALENDAR_CLIENT_ID = "270547399087-1jek86l6efo8q2sjno331oj1hsef4c8b.apps.googleusercontent.com";
+    const GOOGLE_CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar.events";
+    const GOOGLE_CALENDAR_SESSION_KEY = "dailyWorkTrackerGoogleCalendarSession";
+    const GOOGLE_CALENDAR_AUTO_SYNC_KEY = "dailyWorkTrackerGoogleCalendarAutoSync";
     const COLUMNS = [
       { id: "new", title: "收集箱", description: "刚收集，还没有完全整理", color: "#64748b" },
       { id: "inprogress", title: "进行中", description: "已经开始处理", color: "#f59e0b" },
@@ -550,6 +566,7 @@
       reviewItems: [],
       links: "",
       attachments: [],
+      calendarSync: { google: { taskEventId: "", executionEventIds: {}, syncedAt: "" } },
       order: 0,
       createdAt: null,
       updatedAt: null
@@ -565,6 +582,17 @@
         note: attachment.note || (attachment.localId ? "本机文件不上传" : ""),
         uploadedAt: attachment.uploadedAt || attachment.addedAt || attachment.addedAt || null,
         addedAt: attachment.addedAt || attachment.uploadedAt || null
+      };
+    }
+
+    function normalizeCalendarSync(value) {
+      const google = value?.google || {};
+      return {
+        google: {
+          taskEventId: String(google.taskEventId || ""),
+          executionEventIds: google.executionEventIds && typeof google.executionEventIds === "object" ? { ...google.executionEventIds } : {},
+          syncedAt: String(google.syncedAt || "")
+        }
       };
     }
 
@@ -1304,6 +1332,7 @@
         reviewItems: normalizeReviewItems(task.reviewItems, task),
         links: task.links || "",
         attachments: Array.isArray(task.attachments) ? task.attachments.map(normalizeAttachment) : [],
+        calendarSync: normalizeCalendarSync(task.calendarSync),
         order: Number.isFinite(task.order) ? task.order : 0,
         createdAt: task.createdAt || null,
         updatedAt: task.updatedAt || null
@@ -1365,6 +1394,7 @@
         reviewItems: normalizeReviewItems(task.reviewItems, task),
         links: task.links || "",
         attachments: Array.isArray(task.attachments) ? task.attachments.map(normalizeAttachment) : [],
+        calendarSync: normalizeCalendarSync(task.calendarSync),
         status: task.status || "new",
         order: Number.isFinite(task.order) ? task.order : 0,
         updatedAt: timestamp
@@ -2181,6 +2211,231 @@
       return `${year}${month}${day}T${hour}${minute}00`;
     }
 
+    function loadGoogleCalendarSession() {
+      try {
+        const saved = JSON.parse(sessionStorage.getItem(GOOGLE_CALENDAR_SESSION_KEY) || "null");
+        if (!saved?.accessToken || Number(saved.expiresAt || 0) <= Date.now() + 30000) {
+          sessionStorage.removeItem(GOOGLE_CALENDAR_SESSION_KEY);
+          return null;
+        }
+        return saved;
+      } catch {
+        return null;
+      }
+    }
+
+    function saveGoogleCalendarSession(response) {
+      const expiresIn = Math.max(60, Number(response.expires_in || 3600));
+      const session = {
+        accessToken: response.access_token,
+        expiresAt: Date.now() + expiresIn * 1000,
+        scope: response.scope || GOOGLE_CALENDAR_SCOPE
+      };
+      sessionStorage.setItem(GOOGLE_CALENDAR_SESSION_KEY, JSON.stringify(session));
+      return session;
+    }
+
+    function clearGoogleCalendarSession() {
+      sessionStorage.removeItem(GOOGLE_CALENDAR_SESSION_KEY);
+    }
+
+    function loadGoogleCalendarAutoSync() {
+      return localStorage.getItem(GOOGLE_CALENDAR_AUTO_SYNC_KEY) === "yes";
+    }
+
+    function waitForGoogleIdentity(timeoutMs = 12000) {
+      if (window.google?.accounts?.oauth2) return Promise.resolve(window.google.accounts.oauth2);
+      return new Promise((resolve, reject) => {
+        const startedAt = Date.now();
+        const timer = window.setInterval(() => {
+          if (window.google?.accounts?.oauth2) {
+            window.clearInterval(timer);
+            resolve(window.google.accounts.oauth2);
+          } else if (Date.now() - startedAt >= timeoutMs) {
+            window.clearInterval(timer);
+            reject(new Error("Google授权组件加载失败，请检查网络后重试。"));
+          }
+        }, 150);
+      });
+    }
+
+    async function requestGoogleCalendarAccess() {
+      const oauth2 = await waitForGoogleIdentity();
+      return new Promise((resolve, reject) => {
+        let settled = false;
+        const finish = callback => value => {
+          if (settled) return;
+          settled = true;
+          callback(value);
+        };
+        const tokenClient = oauth2.initTokenClient({
+          client_id: GOOGLE_CALENDAR_CLIENT_ID,
+          scope: GOOGLE_CALENDAR_SCOPE,
+          prompt: "consent",
+          callback: finish(response => {
+            if (!response?.access_token || response.error) {
+              reject(new Error(response?.error_description || response?.error || "Google日历授权没有完成。"));
+              return;
+            }
+            resolve(saveGoogleCalendarSession(response));
+          }),
+          error_callback: finish(error => reject(new Error(error?.message || error?.type || "Google日历授权窗口已关闭。")))
+        });
+        tokenClient.requestAccessToken();
+      });
+    }
+
+    async function googleCalendarRequest(path, accessToken, options = {}) {
+      const response = await fetch(`https://www.googleapis.com/calendar/v3${path}`, {
+        ...options,
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          ...(options.body ? { "Content-Type": "application/json" } : {}),
+          ...(options.headers || {})
+        }
+      });
+      if (response.status === 401) {
+        const error = new Error("Google日历授权已失效，请重新连接。 ");
+        error.code = "google-auth-expired";
+        throw error;
+      }
+      if (!response.ok) {
+        const details = await response.json().catch(() => ({}));
+        const error = new Error(details?.error?.message || `Google日历请求失败（${response.status}）`);
+        error.status = response.status;
+        throw error;
+      }
+      if (response.status === 204) return null;
+      return response.json();
+    }
+
+    function googleTaskEventPayload(task) {
+      const startDate = task.startDate || task.deadline || "";
+      if (!startDate) return null;
+      const lastDate = task.deadline && task.startDate && task.deadline >= task.startDate ? task.deadline : startDate;
+      const titlePrefix = task.status === "done" ? "✅" : "工作任务";
+      const event = {
+        summary: `${titlePrefix}｜${task.title || "未命名任务"}`,
+        description: taskCalendarDescription(task),
+        start: { date: startDate },
+        end: { date: addDaysToDateKey(lastDate, 1) },
+        reminders: { useDefault: true },
+        extendedProperties: { private: { dailyWorkTrackerTaskId: task.id, dailyWorkTrackerKind: "task" } }
+      };
+      const reminderAt = toDate(task.reminderAt || task.reminder);
+      const eventStart = toDate(startDate);
+      if (reminderAt && eventStart) {
+        const minutes = Math.round((eventStart.getTime() - reminderAt.getTime()) / 60000);
+        if (minutes >= 0 && minutes <= 40320) event.reminders = { useDefault: false, overrides: [{ method: "popup", minutes }] };
+      }
+      return event;
+    }
+
+    function googleExecutionEventPayload(task, item, index) {
+      const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "Asia/Shanghai";
+      const description = [
+        `所属任务：${task.title || ""}`,
+        `执行项序号：${index + 1}`,
+        `状态：${item.status || ""}`,
+        item.actualHours && `耗时：${item.actualHours} 小时`,
+        item.feedbackNote && `反馈/调整记录：${item.feedbackNote}`,
+        "由每日工作追踪器同步。"
+      ].filter(Boolean).join("\n");
+      const event = {
+        summary: `${item.status === "已完成" ? "✅" : "执行项"}｜${item.text || `执行项${index + 1}`}`,
+        description,
+        reminders: { useDefault: true },
+        extendedProperties: { private: { dailyWorkTrackerTaskId: task.id, dailyWorkTrackerExecutionId: item.id, dailyWorkTrackerKind: "execution" } }
+      };
+      if (item.startedAt || item.endedAt) {
+        const start = item.startedAt || localDateTimeValue(new Date(new Date(item.endedAt).getTime() - 3600000));
+        const end = item.endedAt || localDateTimeValue(new Date(new Date(item.startedAt).getTime() + 3600000));
+        event.start = { dateTime: `${start}:00`, timeZone: timezone };
+        event.end = { dateTime: `${end}:00`, timeZone: timezone };
+        return event;
+      }
+      const dueDate = parseDateExpression(item.dueText);
+      if (!dueDate) return null;
+      event.start = { date: dueDate };
+      event.end = { date: addDaysToDateKey(dueDate, 1) };
+      return event;
+    }
+
+    async function upsertGoogleCalendarEvent(existingId, payload, accessToken) {
+      if (existingId) {
+        try {
+          return await googleCalendarRequest(`/calendars/primary/events/${encodeURIComponent(existingId)}`, accessToken, {
+            method: "PATCH",
+            body: JSON.stringify(payload)
+          });
+        } catch (error) {
+          if (error.status !== 404 && error.status !== 410) throw error;
+        }
+      }
+      return googleCalendarRequest("/calendars/primary/events", accessToken, {
+        method: "POST",
+        body: JSON.stringify(payload)
+      });
+    }
+
+    async function deleteGoogleCalendarEvent(eventId, accessToken) {
+      if (!eventId) return;
+      try {
+        await googleCalendarRequest(`/calendars/primary/events/${encodeURIComponent(eventId)}`, accessToken, { method: "DELETE" });
+      } catch (error) {
+        if (error.status !== 404 && error.status !== 410) throw error;
+      }
+    }
+
+    async function syncTaskToGoogleCalendar(task, accessToken) {
+      const normalized = normalizeTask(task);
+      const previousGoogle = normalizeCalendarSync(normalized.calendarSync).google;
+      let taskEventId = previousGoogle.taskEventId;
+      const taskPayload = googleTaskEventPayload(normalized);
+      if (taskPayload) {
+        const event = await upsertGoogleCalendarEvent(taskEventId, taskPayload, accessToken);
+        taskEventId = event.id;
+      } else if (taskEventId) {
+        await deleteGoogleCalendarEvent(taskEventId, accessToken);
+        taskEventId = "";
+      }
+
+      const executionItems = normalizeExecutionItems(normalized.executionItems, normalized);
+      const executionEventIds = {};
+      for (let index = 0; index < executionItems.length; index += 1) {
+        const item = executionItems[index];
+        const payload = googleExecutionEventPayload(normalized, item, index);
+        const existingId = previousGoogle.executionEventIds[item.id] || "";
+        if (payload) {
+          const event = await upsertGoogleCalendarEvent(existingId, payload, accessToken);
+          executionEventIds[item.id] = event.id;
+        } else if (existingId) {
+          await deleteGoogleCalendarEvent(existingId, accessToken);
+        }
+      }
+      const currentRowIds = new Set(executionItems.map(item => item.id));
+      for (const [rowId, eventId] of Object.entries(previousGoogle.executionEventIds)) {
+        if (!currentRowIds.has(rowId)) await deleteGoogleCalendarEvent(eventId, accessToken);
+      }
+
+      return {
+        ...normalized,
+        calendarSync: {
+          google: {
+            taskEventId,
+            executionEventIds,
+            syncedAt: new Date().toISOString()
+          }
+        }
+      };
+    }
+
+    async function deleteTaskFromGoogleCalendar(task, accessToken) {
+      const google = normalizeCalendarSync(task.calendarSync).google;
+      const eventIds = [google.taskEventId, ...Object.values(google.executionEventIds)].filter(Boolean);
+      for (const eventId of eventIds) await deleteGoogleCalendarEvent(eventId, accessToken);
+    }
+
     function taskCalendarDescription(task) {
       const executionSummary = normalizeExecutionItems(task.executionItems, task).map((item, index) => `${index + 1}. ${item.text}（${item.status}）`).join("\n");
       const finalSummary = normalizeFinalResults(task.finalResults, task.finalResult).map(item => item.text).join("\n");
@@ -2510,6 +2765,44 @@
     // 老板让我明天跟进俄罗斯水槽说明书修改，项目是俄罗斯水槽，优先级高，目前进行中，下一步整理俄文问题清单
     // 客户要求后天确认俄罗斯标签内容，项目是包装标签，优先级高，当前待办
     // 海尔要求今天核对水槽说明书俄文，项目是俄罗斯水槽说明书，目前进行中，下一步输出问题清单
+
+    function GoogleCalendarSettingsModal({ connected, autoSync, busy, message, taskCount, onConnect, onDisconnect, onToggleAutoSync, onSyncAll, onClose }) {
+      return (
+        <div className="modal-backdrop" onMouseDown={event => event.target === event.currentTarget && onClose()}>
+          <div className="modal settings-modal">
+            <div className="modal-header">
+              <div><h2>Google日历同步</h2><p>让工作追踪器中的任务时间同步到Google主日历。</p></div>
+              <button type="button" className="close-button" aria-label="关闭" onClick={onClose}>×</button>
+            </div>
+            <div className="form-body">
+              <p className="settings-warning">日历授权与工作追踪器登录相互独立。访问令牌只保存在当前浏览器会话，不写入Firestore；授权到期后需要重新连接。</p>
+              <div className="calendar-provider">
+                <div className="calendar-provider-header">
+                  <div>
+                    <h3>Google日历</h3>
+                    <p>同步任务的开始/完成日期，以及执行清单中已经设置的时间段。</p>
+                  </div>
+                  <span className={`calendar-connection-state${connected ? " connected" : ""}`}>{connected ? "已连接" : "未连接"}</span>
+                </div>
+                <div className="calendar-actions">
+                  {!connected
+                    ? <button type="button" className="btn btn-primary" onClick={onConnect} disabled={busy}>{busy ? "连接中…" : "连接Google日历"}</button>
+                    : <button type="button" className="btn btn-secondary" onClick={onDisconnect} disabled={busy}>断开连接</button>}
+                  <button type="button" className="btn btn-secondary" onClick={onSyncAll} disabled={!connected || busy || !taskCount}>{busy ? "处理中…" : `同步现有任务（${taskCount}）`}</button>
+                </div>
+                <div className="calendar-setting-row">
+                  <div><strong>保存任务时自动同步</strong><span>新增、修改、拖动状态或删除任务时，同步更新对应Google日程。</span></div>
+                  <label className="check-label"><input type="checkbox" checked={autoSync} onChange={event => onToggleAutoSync(event.target.checked)} /> 开启</label>
+                </div>
+                {message && <p className="calendar-message">{message}</p>}
+              </div>
+              <p className="hint" style={{ marginTop: ".8rem" }}>Google日历是展示和提醒端，工作追踪器仍是任务的主要数据源。直接在Google日历中修改，不会反向更改任务。</p>
+            </div>
+            <div className="modal-actions"><div></div><div className="settings-actions"><button type="button" className="btn btn-primary" onClick={onClose}>完成</button></div></div>
+          </div>
+        </div>
+      );
+    }
 
     function AISettingsModal({ settings, onSave, onClose }) {
       const [form, setForm] = useState(settings);
@@ -4573,6 +4866,11 @@ Return strict JSON only. No markdown. No explanation. No code fence.`;
       const [view, setView] = useState("kanban");
       const [aiSettings, setAISettings] = useState(loadAISettings);
       const [showAISettings, setShowAISettings] = useState(false);
+      const [showCalendarSettings, setShowCalendarSettings] = useState(false);
+      const [googleCalendarSession, setGoogleCalendarSession] = useState(loadGoogleCalendarSession);
+      const [googleCalendarAutoSync, setGoogleCalendarAutoSync] = useState(loadGoogleCalendarAutoSync);
+      const [googleCalendarBusy, setGoogleCalendarBusy] = useState(false);
+      const [googleCalendarMessage, setGoogleCalendarMessage] = useState("");
       const [quickEntryStart, setQuickEntryStart] = useState(false);
       const [installPrompt, setInstallPrompt] = useState(null);
       const [installDismissed, setInstallDismissed] = useState(() => localStorage.getItem("dailyWorkTrackerInstallDismissed") === "yes");
@@ -4693,6 +4991,113 @@ Return strict JSON only. No markdown. No explanation. No code fence.`;
         }
       };
 
+      const validGoogleCalendarSession = () => {
+        const session = loadGoogleCalendarSession();
+        if (!session && googleCalendarSession) setGoogleCalendarSession(null);
+        return session;
+      };
+
+      const connectGoogleCalendar = async () => {
+        setGoogleCalendarBusy(true);
+        setGoogleCalendarMessage("");
+        try {
+          const session = await requestGoogleCalendarAccess();
+          setGoogleCalendarSession(session);
+          setGoogleCalendarAutoSync(true);
+          localStorage.setItem(GOOGLE_CALENDAR_AUTO_SYNC_KEY, "yes");
+          setGoogleCalendarMessage("Google日历已连接。之后保存或修改任务时会自动同步。");
+        } catch (error) {
+          console.error("Google Calendar connection failed", error);
+          setGoogleCalendarMessage(error.message || "Google日历连接失败，请允许弹窗后重试。");
+        } finally {
+          setGoogleCalendarBusy(false);
+        }
+      };
+
+      const disconnectGoogleCalendar = () => {
+        const session = validGoogleCalendarSession();
+        if (session?.accessToken && window.google?.accounts?.oauth2?.revoke) {
+          window.google.accounts.oauth2.revoke(session.accessToken, () => {});
+        }
+        clearGoogleCalendarSession();
+        setGoogleCalendarSession(null);
+        setGoogleCalendarAutoSync(false);
+        localStorage.setItem(GOOGLE_CALENDAR_AUTO_SYNC_KEY, "no");
+        setGoogleCalendarMessage("已断开当前浏览器的Google日历连接。已有日程不会被自动删除。");
+      };
+
+      const toggleGoogleCalendarAutoSync = enabled => {
+        setGoogleCalendarAutoSync(enabled);
+        localStorage.setItem(GOOGLE_CALENDAR_AUTO_SYNC_KEY, enabled ? "yes" : "no");
+        setGoogleCalendarMessage(enabled
+          ? (validGoogleCalendarSession() ? "自动同步已开启。" : "自动同步已开启，但需要先连接Google日历。")
+          : "自动同步已关闭，已有Google日程保持不变。");
+      };
+
+      const syncSavedTaskToGoogle = async (task, force = false) => {
+        if (!force && !googleCalendarAutoSync) return { task, synced: false, skipped: true };
+        const session = validGoogleCalendarSession();
+        if (!session) {
+          setGoogleCalendarMessage("Google日历授权已到期。任务仍已保存，请在“日历同步”中重新连接。");
+          return { task, synced: false, needsConnection: true };
+        }
+        try {
+          const syncedTask = await syncTaskToGoogleCalendar(task, session.accessToken);
+          const metadataSaved = await writeTask(syncedTask, false);
+          if (!metadataSaved) throw new Error("日程已更新，但日程编号未能保存到任务，请稍后重新同步。");
+          return { task: syncedTask, synced: true };
+        } catch (error) {
+          console.error("Google Calendar task sync failed", error);
+          if (error.code === "google-auth-expired") {
+            clearGoogleCalendarSession();
+            setGoogleCalendarSession(null);
+          }
+          setGoogleCalendarMessage(error.message || "Google日历同步失败，任务数据没有丢失。");
+          return { task, synced: false, error };
+        }
+      };
+
+      const syncAllTasksToGoogle = async () => {
+        const session = validGoogleCalendarSession();
+        if (!session) {
+          setGoogleCalendarMessage("请先连接Google日历。");
+          return;
+        }
+        const eligibleTasks = tasks.filter(task => {
+          const google = normalizeCalendarSync(task.calendarSync).google;
+          const hasExistingEvents = Boolean(google.taskEventId || Object.keys(google.executionEventIds).length);
+          return hasExistingEvents || googleTaskEventPayload(task) || normalizeExecutionItems(task.executionItems, task).some((item, index) => googleExecutionEventPayload(task, item, index));
+        });
+        if (!eligibleTasks.length) {
+          setGoogleCalendarMessage("当前没有填写任务日期或执行项时间的任务。");
+          return;
+        }
+        setGoogleCalendarBusy(true);
+        setGoogleCalendarMessage(`正在同步 0 / ${eligibleTasks.length} 个任务…`);
+        let completed = 0;
+        let failed = 0;
+        for (const task of eligibleTasks) {
+          try {
+            const syncedTask = await syncTaskToGoogleCalendar(task, session.accessToken);
+            if (!(await writeTask(syncedTask, false))) throw new Error("无法保存日程编号");
+            completed += 1;
+          } catch (error) {
+            console.error("Existing task Google Calendar sync failed", task.id, error);
+            failed += 1;
+            if (error.code === "google-auth-expired") {
+              clearGoogleCalendarSession();
+              setGoogleCalendarSession(null);
+              break;
+            }
+          }
+          setGoogleCalendarMessage(`正在同步 ${completed + failed} / ${eligibleTasks.length} 个任务…`);
+        }
+        setGoogleCalendarBusy(false);
+        setGoogleCalendarMessage(failed
+          ? `已同步 ${completed} 个任务，${failed} 个失败。失败任务可以重新连接后再同步。`
+          : `已将 ${completed} 个现有任务同步到Google日历。`);
+      };
+
       const saveAttachmentRecord = async (task, isNewRecord = false) => {
         if (!services?.configured || !user) throw new Error("Please sign in before saving attachment links.");
         const updatedTask = normalizeTask({
@@ -4804,6 +5209,8 @@ Return strict JSON only. No markdown. No explanation. No code fence.`;
       const logOut = async () => {
         setSyncStatus("Syncing");
         try {
+          clearGoogleCalendarSession();
+          setGoogleCalendarSession(null);
           await services.signOut(services.auth);
         } catch (error) {
           console.error("Sign out failed", error);
@@ -4820,13 +5227,36 @@ Return strict JSON only. No markdown. No explanation. No code fence.`;
           const columnOrders = tasks.filter(item => item.status === task.status).map(item => item.order || 0);
           task.order = (columnOrders.length ? Math.max(...columnOrders) : 0) + 1;
         }
-        if (await writeTask(task, isNew)) setEditing(null);
+        if (!(await writeTask(task, isNew))) return;
+        const calendarResult = await syncSavedTaskToGoogle(task);
+        if (calendarResult.synced) setMessage("任务已保存，Google日历已同步。");
+        else if (calendarResult.needsConnection) setMessage("任务已保存；Google日历需要重新连接后才能继续同步。");
+        else if (calendarResult.error) setMessage("任务已保存，但Google日历同步失败；任务数据没有丢失。");
+        setEditing(null);
       };
       const deleteTask = async id => {
-        if (!window.confirm("确定删除这个任务吗？此操作不能撤销。")) return;
+        const task = tasks.find(item => item.id === id) || (editing?.id === id ? editing : null);
+        const hasGoogleEvents = task && (() => {
+          const google = normalizeCalendarSync(task.calendarSync).google;
+          return Boolean(google.taskEventId || Object.keys(google.executionEventIds).length);
+        })();
+        const calendarSession = validGoogleCalendarSession();
+        const warning = hasGoogleEvents && !calendarSession
+          ? "\n\n当前Google日历未连接，任务会删除，但日历中的旧日程无法同时删除。"
+          : "";
+        if (!window.confirm(`确定删除这个任务吗？此操作不能撤销。${warning}`)) return;
+        const deleteCalendarEvents = Boolean(hasGoogleEvents && calendarSession && window.confirm("是否同时删除Google日历中与这个任务对应的日程？"));
         setSyncStatus("Syncing");
         setMessage("");
         try {
+          if (task && deleteCalendarEvents && calendarSession) {
+            try {
+              await deleteTaskFromGoogleCalendar(task, calendarSession.accessToken);
+            } catch (calendarError) {
+              console.error("Could not delete Google Calendar events", calendarError);
+              setGoogleCalendarMessage("任务已删除，但部分Google日程可能未删除，请检查日历。 ");
+            }
+          }
           await services.deleteDoc(services.doc(tasksCollection(), id));
           setEditing(null);
         } catch (error) {
@@ -4852,7 +5282,10 @@ Return strict JSON only. No markdown. No explanation. No code fence.`;
           const columnOrders = tasks.filter(item => item.status === status).map(item => item.order || 0);
           const movedTask = { ...task, status, order: (columnOrders.length ? Math.max(...columnOrders) : 0) + 1 };
           setTasks(current => current.map(item => item.id === movedTask.id ? movedTask : item));
-          await writeTask(movedTask);
+          if (await writeTask(movedTask)) {
+            const calendarResult = await syncSavedTaskToGoogle(movedTask);
+            if (calendarResult.synced) setMessage("任务状态和Google日历已同步。");
+          }
         }
         setDragOver(null);
       };
@@ -5001,6 +5434,11 @@ Return strict JSON only. No markdown. No explanation. No code fence.`;
 
       const activeCount = tasks.filter(task => !["done", "archived"].includes(task.status)).length;
       const doneCount = tasks.filter(task => task.status === "done").length;
+      const googleCalendarConnected = Boolean(googleCalendarSession?.accessToken && Number(googleCalendarSession.expiresAt || 0) > Date.now() + 30000);
+      const calendarEligibleTaskCount = tasks.filter(task => {
+        const google = normalizeCalendarSync(task.calendarSync).google;
+        return google.taskEventId || Object.keys(google.executionEventIds).length || googleTaskEventPayload(task) || normalizeExecutionItems(task.executionItems, task).some((item, index) => googleExecutionEventPayload(task, item, index));
+      }).length;
       const availablePriorityOptions = uniquePriorityOptions(tasks.map(task => task.priority));
 
       const statusClass = syncStatus === "Synced" ? "synced" : syncStatus === "Syncing" ? "syncing" : syncStatus === "Sync failed" ? "failed" : "";
@@ -5039,6 +5477,7 @@ Return strict JSON only. No markdown. No explanation. No code fence.`;
                 <div className="account-area">
                   <span className="account-email" title={user.email}>{user.email}</span>
                   <button className="btn btn-secondary" onClick={logOut}>退出登录</button>
+                  <button className="btn btn-secondary" onClick={() => setShowCalendarSettings(true)}>日历同步{googleCalendarConnected ? " ✓" : ""}</button>
                   <button className="btn btn-secondary" onClick={() => setShowAISettings(true)}>AI设置</button>
                   <button className="btn btn-secondary" onClick={() => openNew("new", true)}>智能入口</button>
                   <button className="btn btn-primary" onClick={() => openNew("new")}>+ 新任务</button>
@@ -5136,6 +5575,7 @@ Return strict JSON only. No markdown. No explanation. No code fence.`;
             </>
           )}
           {editing && <TaskModal task={editing} isNew={isNew} onSave={saveTask} onDelete={deleteTask} onClose={() => setEditing(null)} onSaveAttachmentRecord={saveAttachmentRecord} aiSettings={aiSettings} onOpenAISettings={() => setShowAISettings(true)} quickEntryStart={quickEntryStart} availablePriorityOptions={availablePriorityOptions} />}
+          {showCalendarSettings && <GoogleCalendarSettingsModal connected={googleCalendarConnected} autoSync={googleCalendarAutoSync} busy={googleCalendarBusy} message={googleCalendarMessage} taskCount={calendarEligibleTaskCount} onConnect={connectGoogleCalendar} onDisconnect={disconnectGoogleCalendar} onToggleAutoSync={toggleGoogleCalendarAutoSync} onSyncAll={syncAllTasksToGoogle} onClose={() => setShowCalendarSettings(false)} />}
           {showAISettings && <AISettingsModal settings={aiSettings} onSave={setAISettings} onClose={() => setShowAISettings(false)} />}
         </>
       );
