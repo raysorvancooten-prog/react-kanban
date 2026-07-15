@@ -2263,9 +2263,15 @@
       const oauth2 = await waitForGoogleIdentity();
       return new Promise((resolve, reject) => {
         let settled = false;
+        const timeoutId = window.setTimeout(() => {
+          if (settled) return;
+          settled = true;
+          reject(new Error("Google授权没有返回结果。请关闭授权窗口后重新连接，并完成“高级 → 转到应用 → 允许”的全部步骤。"));
+        }, 120000);
         const finish = callback => value => {
           if (settled) return;
           settled = true;
+          window.clearTimeout(timeoutId);
           callback(value);
         };
         const tokenClient = oauth2.initTokenClient({
@@ -2281,7 +2287,7 @@
           }),
           error_callback: finish(error => reject(new Error(error?.message || error?.type || "Google日历授权窗口已关闭。")))
         });
-        tokenClient.requestAccessToken();
+        tokenClient.requestAccessToken({ prompt: "consent" });
       });
     }
 
@@ -2766,7 +2772,7 @@
     // 客户要求后天确认俄罗斯标签内容，项目是包装标签，优先级高，当前待办
     // 海尔要求今天核对水槽说明书俄文，项目是俄罗斯水槽说明书，目前进行中，下一步输出问题清单
 
-    function GoogleCalendarSettingsModal({ connected, autoSync, busy, message, taskCount, onConnect, onDisconnect, onToggleAutoSync, onSyncAll, onClose }) {
+    function GoogleCalendarSettingsModal({ connected, autoSync, busy, message, taskCount, onConnect, onCancelConnect, onDisconnect, onToggleAutoSync, onSyncAll, onClose }) {
       return (
         <div className="modal-backdrop" onMouseDown={event => event.target === event.currentTarget && onClose()}>
           <div className="modal settings-modal">
@@ -2788,6 +2794,7 @@
                   {!connected
                     ? <button type="button" className="btn btn-primary" onClick={onConnect} disabled={busy}>{busy ? "连接中…" : "连接Google日历"}</button>
                     : <button type="button" className="btn btn-secondary" onClick={onDisconnect} disabled={busy}>断开连接</button>}
+                  {!connected && busy && <button type="button" className="btn btn-secondary" onClick={onCancelConnect}>取消本次连接</button>}
                   <button type="button" className="btn btn-secondary" onClick={onSyncAll} disabled={!connected || busy || !taskCount}>{busy ? "处理中…" : `同步现有任务（${taskCount}）`}</button>
                 </div>
                 <div className="calendar-setting-row">
@@ -4878,6 +4885,7 @@ Return strict JSON only. No markdown. No explanation. No code fence.`;
       const [backfillBusy, setBackfillBusy] = useState(false);
       const draggedId = useRef(null);
       const backupInputRef = useRef(null);
+      const googleCalendarAttemptRef = useRef(0);
 
       useEffect(() => {
         if (window.firebaseServices) {
@@ -4998,20 +5006,40 @@ Return strict JSON only. No markdown. No explanation. No code fence.`;
       };
 
       const connectGoogleCalendar = async () => {
+        const attemptId = googleCalendarAttemptRef.current + 1;
+        googleCalendarAttemptRef.current = attemptId;
         setGoogleCalendarBusy(true);
         setGoogleCalendarMessage("");
         try {
           const session = await requestGoogleCalendarAccess();
+          if (attemptId !== googleCalendarAttemptRef.current) {
+            clearGoogleCalendarSession();
+            return;
+          }
           setGoogleCalendarSession(session);
           setGoogleCalendarAutoSync(true);
           localStorage.setItem(GOOGLE_CALENDAR_AUTO_SYNC_KEY, "yes");
           setGoogleCalendarMessage("Google日历已连接。之后保存或修改任务时会自动同步。");
         } catch (error) {
+          if (attemptId !== googleCalendarAttemptRef.current) return;
           console.error("Google Calendar connection failed", error);
           setGoogleCalendarMessage(error.message || "Google日历连接失败，请允许弹窗后重试。");
         } finally {
-          setGoogleCalendarBusy(false);
+          if (attemptId === googleCalendarAttemptRef.current) setGoogleCalendarBusy(false);
         }
+      };
+
+      const cancelGoogleCalendarConnect = () => {
+        googleCalendarAttemptRef.current += 1;
+        clearGoogleCalendarSession();
+        setGoogleCalendarSession(null);
+        setGoogleCalendarBusy(false);
+        setGoogleCalendarMessage("本次连接已取消。重新连接时，请在Google提示页完成“高级 → 转到应用 → 允许”的全部步骤。");
+      };
+
+      const closeGoogleCalendarSettings = () => {
+        if (googleCalendarBusy && !validGoogleCalendarSession()) cancelGoogleCalendarConnect();
+        setShowCalendarSettings(false);
       };
 
       const disconnectGoogleCalendar = () => {
@@ -5575,7 +5603,7 @@ Return strict JSON only. No markdown. No explanation. No code fence.`;
             </>
           )}
           {editing && <TaskModal task={editing} isNew={isNew} onSave={saveTask} onDelete={deleteTask} onClose={() => setEditing(null)} onSaveAttachmentRecord={saveAttachmentRecord} aiSettings={aiSettings} onOpenAISettings={() => setShowAISettings(true)} quickEntryStart={quickEntryStart} availablePriorityOptions={availablePriorityOptions} />}
-          {showCalendarSettings && <GoogleCalendarSettingsModal connected={googleCalendarConnected} autoSync={googleCalendarAutoSync} busy={googleCalendarBusy} message={googleCalendarMessage} taskCount={calendarEligibleTaskCount} onConnect={connectGoogleCalendar} onDisconnect={disconnectGoogleCalendar} onToggleAutoSync={toggleGoogleCalendarAutoSync} onSyncAll={syncAllTasksToGoogle} onClose={() => setShowCalendarSettings(false)} />}
+          {showCalendarSettings && <GoogleCalendarSettingsModal connected={googleCalendarConnected} autoSync={googleCalendarAutoSync} busy={googleCalendarBusy} message={googleCalendarMessage} taskCount={calendarEligibleTaskCount} onConnect={connectGoogleCalendar} onCancelConnect={cancelGoogleCalendarConnect} onDisconnect={disconnectGoogleCalendar} onToggleAutoSync={toggleGoogleCalendarAutoSync} onSyncAll={syncAllTasksToGoogle} onClose={closeGoogleCalendarSettings} />}
           {showAISettings && <AISettingsModal settings={aiSettings} onSave={setAISettings} onClose={() => setShowAISettings(false)} />}
         </>
       );
